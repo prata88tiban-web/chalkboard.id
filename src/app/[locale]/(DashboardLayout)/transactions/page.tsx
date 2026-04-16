@@ -1,7 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from 'next-intl';
 import CardBox from "@/components/shared/CardBox";
 import { Button, Badge, Table, Modal, Alert, Select, Label, TextInput } from "flowbite-react";
@@ -88,6 +88,7 @@ const TransactionsPage = () => {
   const sessionHook = useSession();
   const { data: session, status } = sessionHook || { data: null, status: 'loading' };
   const router = useRouter();
+  const searchParams = useSearchParams();
   const t = useTranslations();
   const tAlerts = useTranslations('Alerts');
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -104,6 +105,12 @@ const TransactionsPage = () => {
     name: 'PPN',
     applyToTables: false,
     applyToFnb: true
+  });
+  const [storeSettings, setStoreSettings] = useState({
+    store_name: '',
+    store_address: '',
+    store_phone: '',
+    store_notes: ''
   });
 
   // Filter states
@@ -139,6 +146,7 @@ const TransactionsPage = () => {
     if (session) {
       fetchPayments();
       fetchTaxSettings();
+      fetchStoreSettings();
     }
   }, [session]);
 
@@ -151,6 +159,24 @@ const TransactionsPage = () => {
       }
     } catch (error) {
       console.error('Failed to fetch tax settings:', error);
+    }
+  };
+
+  const fetchStoreSettings = async () => {
+    try {
+      const response = await fetch('/api/admin/settings');
+      if (response.ok) {
+        const data = await response.json();
+        const s = data.settings || {};
+        setStoreSettings({
+          store_name: (s.store_name || '').trim(),
+          store_address: (s.store_address || '').trim(),
+          store_phone: (s.store_phone || '').trim(),
+          store_notes: (s.store_notes || '').trim()
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch store settings:', error);
     }
   };
 
@@ -275,6 +301,20 @@ const TransactionsPage = () => {
     }
   };
 
+  // Auto-open payment modal when redirected from checkout with paymentId param
+  useEffect(() => {
+    const paymentId = searchParams.get('paymentId');
+    if (paymentId && payments.length > 0) {
+      const payment = payments.find(p => p.id === parseInt(paymentId));
+      if (payment) {
+        setSelectedPayment(payment);
+        setShowPaymentModal(true);
+        // Clean up the URL param
+        router.replace(window.location.pathname, { scroll: false });
+      }
+    }
+  }, [payments, searchParams]);
+
   const openPaymentModal = (payment: Payment) => {
     setSelectedPayment(payment);
     setShowPaymentModal(true);
@@ -310,8 +350,9 @@ const TransactionsPage = () => {
       (locale === 'id' ? 'Pajak' : 'Tax');
     
     // Create a temporary translations object for the selected locale
+    const storeName = storeSettings.store_name || (locale === 'id' ? 'BILLIARD CHALKBOARD' : 'CHALKBOARD BILLIARD');
     const receiptTranslations = locale === 'id' ? {
-      title: 'BILLIARD CHALKBOARD',
+      title: storeName.toUpperCase(),
       subtitle: 'Struk Pembayaran',
       transaction: 'Transaksi',
       date: 'Tanggal',
@@ -331,14 +372,14 @@ const TransactionsPage = () => {
       total: 'TOTAL',
       walkInCustomer: 'Pelanggan Walk-in',
       thankYou: 'Terima kasih atas kunjungan Anda!',
-      businessName: 'Billiard Hall ChalkBoard',
+      businessName: storeSettings.store_name || 'Billiard Hall ChalkBoard',
       generated: 'Dicetak',
       pending: 'TERTUNDA',
       success: 'BERHASIL',
       failed: 'GAGAL',
       cancelled: 'DIBATALKAN'
     } : {
-      title: 'CHALKBOARD BILLIARD',
+      title: storeName.toUpperCase(),
       subtitle: 'Receipt',
       transaction: 'Transaction',
       date: 'Date',
@@ -358,7 +399,7 @@ const TransactionsPage = () => {
       total: 'TOTAL',
       walkInCustomer: 'Walk-in Customer',
       thankYou: 'Thank you for visiting!',
-      businessName: 'ChalkBoard Billiard Hall',
+      businessName: storeSettings.store_name || 'ChalkBoard Billiard Hall',
       generated: 'Generated',
       pending: 'PENDING',
       success: 'SUCCESS',
@@ -466,8 +507,10 @@ const TransactionsPage = () => {
       <body>
         <div class="header">
           <h1>${receiptTranslations.title}</h1>
+          ${storeSettings.store_address ? `<p>${storeSettings.store_address}</p>` : ''}
+          ${storeSettings.store_phone ? `<p>${storeSettings.store_phone}</p>` : ''}
           <p>${receiptTranslations.subtitle}</p>
-          <p>${receiptTranslations.transaction}: ${payment.transactionNumber}</p>
+          <p style="font-size:13px; font-weight:bold; margin-top:4px">${receiptTranslations.transaction}: ${payment.transactionNumber}</p>
           <p>${receiptTranslations.date}: ${formatDateTime(payment.createdAt)}</p>
         </div>
 
@@ -544,6 +587,7 @@ const TransactionsPage = () => {
 
         <div class="footer">
           <p>${receiptTranslations.thankYou}</p>
+          ${storeSettings.store_notes ? `<p style="margin-top:4px">${storeSettings.store_notes}</p>` : ''}
           <p>${receiptTranslations.businessName}</p>
           <p>${receiptTranslations.generated}: ${new Date().toLocaleString(locale === 'id' ? 'id-ID' : 'en-US')}</p>
         </div>
