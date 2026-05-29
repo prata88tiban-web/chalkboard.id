@@ -102,7 +102,7 @@ const tryTauriRawPrint = async (html: string) => {
   }
 
   const { invoke } = await import("@tauri-apps/api/core");
-  const printerName = window.localStorage.getItem("chalkboard_thermal_printer") || DEFAULT_THERMAL_PRINTER;
+  const printerName = window.localStorage.getItem("b3billing_thermal_printer") || DEFAULT_THERMAL_PRINTER;
   await invoke("print_receipt_raw", {
     receipt: htmlToReceiptText(html),
     printerName,

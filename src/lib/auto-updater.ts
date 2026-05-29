@@ -56,7 +56,7 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
     const response = await fetch(updateUrl, {
       method: 'GET',
       headers: {
-        'User-Agent': `Chalkboard/${currentVersion} (Windows)`,
+        'User-Agent': `B3-Billing Billiard Batam/${currentVersion} (Windows)`,
         'Accept': 'application/json',
       },
       signal: controller.signal,
@@ -121,7 +121,7 @@ export async function downloadUpdate(
   
   try {
     const updatesDir = path.join(process.cwd(), 'updates');
-    const fileName = `chalkboard-v${updateInfo.version}.exe`;
+    const fileName = `b3billing-v${updateInfo.version}.exe`;
     const downloadPath = path.join(updatesDir, fileName);
     
     // Ensure updates directory exists
@@ -265,7 +265,7 @@ export async function installUpdateAndRestart(
     
     const updateScript = `
 @echo off
-echo Updating Chalkboard.id...
+echo Updating B3-Billing Billiard Batam...
 timeout /t 3 /nobreak >nul
 echo Backing up current version...
 move "${currentExe}" "${backupExe}"

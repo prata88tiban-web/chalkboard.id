@@ -1,29 +1,28 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from 'next-intl';
-import { Button, Badge, Modal, TextInput, Label, Select, Alert, Tabs } from "flowbite-react";
+import { Button, Modal, TextInput, Label, Select, Tabs } from "flowbite-react";
 import { 
   IconPlus, 
-  IconEdit, 
-  IconTrash, 
   IconPlayerPlay, 
   IconPlayerStop,
   IconCurrencyDollar,
   IconClock,
   IconCheck,
-  IconCreditCard,
   IconToolsKitchen2,
-  IconFileText,
   IconShoppingCart,
   IconMinus,
   IconX,
   IconChevronRight,
   IconChevronLeft,
-  IconTransfer,
-  IconPackage,
-  IconSearch
+  IconFilter,
+  IconLayoutGrid,
+  IconList,
+  IconSearch,
+  IconInfoCircle,
+  IconBulb
 } from "@tabler/icons-react";
 import DefaultSpinner from "@/components/ui-components/Spinner/DefaultSpinner";
 import DurationManagement from "@/components/tables/DurationManagement";
@@ -32,6 +31,19 @@ import EnhancedBillingModal from "@/components/tables/EnhancedBillingModal";
 import { PricingPackage } from "@/schema";
 import { calculateTax as calculateTaxFromSettings, formatTaxLabel } from "@/lib/tax";
 import { printHtml } from "@/lib/print-html";
+
+// Import new UI components
+import {
+  ToastProvider,
+  useToast,
+  StatusBadge,
+  Hint,
+  AutoRefreshIndicator,
+  SearchAutocomplete,
+  Toolbar,
+  ToolbarGroup,
+  ToolbarDivider,
+} from "@/components/ui";
 
 // Helper function to format currency
 const formatCurrency = (amount: number | string) => {
@@ -140,11 +152,46 @@ interface Staff {
   isActive: boolean;
 }
 
-const TablesManagement = () => {
+// Status filter options
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All Tables', color: 'bg-gray-500' },
+  { value: 'available', label: 'Available', color: 'bg-emerald-500' },
+  { value: 'occupied', label: 'Occupied', color: 'bg-rose-500' },
+  { value: 'maintenance', label: 'Maintenance', color: 'bg-amber-500' },
+  { value: 'reserved', label: 'Reserved', color: 'bg-sky-500' },
+];
+
+// Card color configurations
+const cardColors: Record<string, { gradient: string; border: string; header: string }> = {
+  available: {
+    gradient: 'from-emerald-500/5 via-emerald-500/10 to-emerald-600/5',
+    border: 'border-emerald-200 dark:border-emerald-800 hover:border-emerald-400',
+    header: 'bg-gradient-to-r from-emerald-500 to-emerald-600',
+  },
+  occupied: {
+    gradient: 'from-rose-500/5 via-rose-500/10 to-rose-600/5',
+    border: 'border-rose-200 dark:border-rose-800 hover:border-rose-400',
+    header: 'bg-gradient-to-r from-rose-500 to-rose-600',
+  },
+  maintenance: {
+    gradient: 'from-amber-500/5 via-amber-500/10 to-amber-600/5',
+    border: 'border-amber-200 dark:border-amber-800 hover:border-amber-400',
+    header: 'bg-gradient-to-r from-amber-500 to-amber-600',
+  },
+  reserved: {
+    gradient: 'from-sky-500/5 via-sky-500/10 to-sky-600/5',
+    border: 'border-sky-200 dark:border-sky-800 hover:border-sky-400',
+    header: 'bg-gradient-to-r from-sky-500 to-sky-600',
+  },
+};
+
+// Main component wrapped with Toast provider
+const TablesManagementContent = () => {
   const sessionHook = useSession();
   const { data: session, status } = sessionHook || { data: null, status: 'loading' };
   const router = useRouter();
   const locale = useLocale();
+  const { addToast } = useToast();
   const t = useTranslations('TablesManagement');
   const tCards = useTranslations('TableCard');
   const tAlerts = useTranslations('Alerts');
@@ -152,6 +199,8 @@ const TablesManagement = () => {
   const tModals = useTranslations('Modals');
   const tCommon = useTranslations('Common');
   const tPOS = useTranslations('POS');
+  
+  // State
   const [tables, setTables] = useState<BilliardTable[]>([]);
   const [sessions, setSessions] = useState<{ [key: number]: TableSession }>({});
   const [loading, setLoading] = useState(true);
@@ -166,7 +215,6 @@ const TablesManagement = () => {
   const [selectedTable, setSelectedTable] = useState<BilliardTable | null>(null);
   const [selectedSession, setSelectedSession] = useState<TableSession | null>(null);
   const [billingData, setBillingData] = useState<any>(null);
-  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [taxSettings, setTaxSettings] = useState({
     enabled: false,
     percentage: 11,
@@ -174,6 +222,14 @@ const TablesManagement = () => {
     applyToTables: false,
     applyToFnb: true
   });
+
+  // UI State
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [pinnedTables, setPinnedTables] = useState<number[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [showHints, setShowHints] = useState(true);
 
   // F&B Modal States
   const [categories, setCategories] = useState<FnbCategory[]>([]);
@@ -184,7 +240,7 @@ const TablesManagement = () => {
   const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
   const [fnbLoading, setFnbLoading] = useState(false);
   const [selectedStaffId, setSelectedStaffId] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [fnbSearchQuery, setFnbSearchQuery] = useState('');
 
   // Form states
   const [formData, setFormData] = useState({
@@ -213,8 +269,14 @@ const TablesManagement = () => {
     }
   }, [status, router]);
 
+  // Show toast notification
+  const showAlert = useCallback((type: 'success' | 'error' | 'warning' | 'info', message: string) => {
+    addToast({ type, title: type.charAt(0).toUpperCase() + type.slice(1), message });
+  }, [addToast]);
+
   // Fetch tables data
-  const fetchTables = async () => {
+  const fetchTables = useCallback(async () => {
+    setIsRefreshing(true);
     try {
       const response = await fetch('/api/tables');
       if (response.ok) {
@@ -245,14 +307,16 @@ const TablesManagement = () => {
             }
           }
         });
+        setLastRefresh(new Date());
       }
     } catch (error) {
       console.error('Failed to fetch tables:', error);
       showAlert('error', tAlerts('genericError'));
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [showAlert, tAlerts]);
 
   // Fetch F&B data for modal
   const fetchFnbData = async () => {
@@ -310,7 +374,6 @@ const TablesManagement = () => {
         const ordersData = await response.json();
         setExistingOrders(ordersData);
       } else {
-        console.error('Failed to fetch existing orders');
         setExistingOrders([]);
       }
     } catch (error) {
@@ -318,15 +381,6 @@ const TablesManagement = () => {
       setExistingOrders([]);
     }
   };
-
-  useEffect(() => {
-    if (session) {
-      fetchTables();
-      fetchTaxSettings();
-      fetchPricingPackages();
-      fetchDefaultStaff();
-    }
-  }, [session]);
 
   const fetchDefaultStaff = async () => {
     try {
@@ -356,33 +410,105 @@ const TablesManagement = () => {
     }
   };
 
+  useEffect(() => {
+    if (session) {
+      fetchTables();
+      fetchTaxSettings();
+      fetchPricingPackages();
+      fetchDefaultStaff();
+    }
+  }, [session, fetchTables]);
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (session && !isRefreshing) {
+        fetchTables();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [session, isRefreshing, fetchTables]);
+
   // Update current time every second for real-time duration display
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
-
     return () => clearInterval(timer);
   }, []);
 
-  // Show notification when planned sessions expire (no auto-stop)
+  // Show notification when planned sessions expire
   useEffect(() => {
     tables.forEach((table) => {
       const tableSession = sessions[table.id];
       if (!tableSession) return;
-      if ((tableSession.plannedDuration || 0) <= 0) return; // open mode
+      if ((tableSession.plannedDuration || 0) <= 0) return;
       const elapsed = calculateElapsedTime(tableSession.startTime);
       const remaining = tableSession.plannedDuration * 60 - elapsed;
       if (remaining <= 0 && !autoEndTriggeredRef.current.has(table.id)) {
         autoEndTriggeredRef.current.add(table.id);
-        showAlert('error', t('timeExpired.notification', { tableName: table.name }));
+        showAlert('warning', t('timeExpired.notification', { tableName: table.name }));
       }
     });
-  }, [currentTime, sessions, tables]);
+  }, [currentTime, sessions, tables, showAlert, t]);
 
-  const showAlert = (type: 'success' | 'error', message: string) => {
-    setAlert({ type, message });
-    setTimeout(() => setAlert(null), 5000);
+  // Filter and sort tables
+  const filteredTables = useMemo(() => {
+    let result = [...tables];
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      result = result.filter(t => t.status === statusFilter);
+    }
+    
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(t => 
+        t.name.toLowerCase().includes(query) ||
+        (sessions[t.id]?.customerName?.toLowerCase().includes(query))
+      );
+    }
+    
+    // Sort: pinned first, then by name
+    result.sort((a, b) => {
+      const aPinned = pinnedTables.includes(a.id);
+      const bPinned = pinnedTables.includes(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0;
+    });
+    
+    return result;
+  }, [tables, statusFilter, searchQuery, pinnedTables, sessions]);
+
+  // Search autocomplete items
+  const searchItems = useMemo(() => {
+    return tables.map(t => ({
+      id: t.id,
+      type: 'table' as const,
+      label: t.name,
+      sublabel: sessions[t.id]?.customerName || undefined,
+      status: t.status,
+    }));
+  }, [tables, sessions]);
+
+  // Stats
+  const stats = useMemo(() => ({
+    total: tables.length,
+    available: tables.filter(t => t.status === 'available').length,
+    occupied: tables.filter(t => t.status === 'occupied').length,
+    maintenance: tables.filter(t => t.status === 'maintenance').length,
+    reserved: tables.filter(t => t.status === 'reserved').length,
+  }), [tables]);
+
+  // Toggle pin
+  const togglePin = (tableId: number) => {
+    setPinnedTables(prev => 
+      prev.includes(tableId) 
+        ? prev.filter(id => id !== tableId)
+        : [...prev, tableId]
+    );
   };
 
   // F&B Cart Functions
@@ -442,7 +568,6 @@ const TablesManagement = () => {
     setCart([]);
   };
 
-  // Add item from existing order to cart (for editing existing orders)
   const addFromExistingToCart = (orderItem: ExistingOrderItem) => {
     const existingItem = cart.find(cartItem => cartItem.id === orderItem.itemId);
     
@@ -463,17 +588,12 @@ const TablesManagement = () => {
     }
   };
 
-  // Remove item from cart and add back to available items (visual helper)
-  const moveFromCartToMenu = (cartItem: CartItem) => {
-    removeFromCart(cartItem.id);
-  };
-
   const calculateTotal = () => {
     return cart.reduce((total, item) => total + (parseFloat(item.price) * item.quantity), 0);
   };
 
   const calculateTax = (subtotal: number) => {
-    return calculateTaxFromSettings(subtotal, taxSettings, false); // Use tax settings, isTable=false for F&B
+    return calculateTaxFromSettings(subtotal, taxSettings, false);
   };
 
   // Process F&B Order
@@ -494,14 +614,14 @@ const TablesManagement = () => {
     }
 
     try {
-      const session = sessions[selectedTable.id];
+      const tableSession = sessions[selectedTable.id];
       const subtotal = calculateTotal();
       const tax = calculateTax(subtotal);
       const total = subtotal + tax;
 
       const orderPayload = {
         context: 'table_session',
-        customerName: session.customerName,
+        customerName: tableSession.customerName,
         customerPhone: null,
         tableId: selectedTable.id,
         staffId: parseInt(selectedStaffId),
@@ -528,11 +648,10 @@ const TablesManagement = () => {
         showAlert('success', tAlerts('orderCreatedAddedToBill', { orderNumber: orderResult.orderNumber, tableName: selectedTable.name }));
         clearCart();
         setSelectedStaffId(defaultStaffIdRef.current);
-        // Refresh existing orders to show the new order
         if (selectedTable) {
           await fetchExistingOrders(selectedTable.id);
         }
-        fetchTables(); // Refresh to show updated session info
+        fetchTables();
       } else {
         const error = await response.json();
         showAlert('error', error.message || tAlerts('failedToCreateOrder'));
@@ -553,26 +672,20 @@ const TablesManagement = () => {
     setSelectedTable(table);
     setShowFnbModal(true);
     
-    // Fetch F&B data if not already loaded
     if (categories.length === 0) {
       await fetchFnbData();
     }
 
-    // Fetch existing orders for the table
     await fetchExistingOrders(table.id);
   };
 
+  // Table CRUD handlers
   const handleCreateTable = async () => {
     try {
-      const requestData = {
-        name: formData.name,
-        status: formData.status,
-      };
-
       const response = await fetch('/api/tables', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData),
+        body: JSON.stringify(formData),
       });
 
       if (response.ok) {
@@ -593,15 +706,10 @@ const TablesManagement = () => {
     if (!selectedTable) return;
 
     try {
-      const requestData = {
-        name: formData.name,
-        status: formData.status
-      };
-
       const response = await fetch(`/api/tables/${selectedTable.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData),
+        body: JSON.stringify(formData),
       });
 
       if (response.ok) {
@@ -693,10 +801,7 @@ const TablesManagement = () => {
 
   const openEditModal = (table: BilliardTable) => {
     setSelectedTable(table);
-    setFormData({
-      name: table.name,
-      status: table.status
-    });
+    setFormData({ name: table.name, status: table.status });
     setShowEditModal(true);
   };
 
@@ -711,50 +816,26 @@ const TablesManagement = () => {
     setShowSessionModal(true);
   };
 
-  const openDurationModal = (table: BilliardTable, session: TableSession) => {
+  const openDurationModal = (table: BilliardTable, tableSession: TableSession) => {
     setSelectedTable(table);
-    setSelectedSession(session);
+    setSelectedSession(tableSession);
     setShowDurationModal(true);
   };
 
-  const openMoveSessionModal = (table: BilliardTable, session: TableSession) => {
+  const openMoveSessionModal = (table: BilliardTable, tableSession: TableSession) => {
     setSelectedTable(table);
-    setSelectedSession(session);
+    setSelectedSession(tableSession);
     setShowMoveSessionModal(true);
-  };
-
-  const handleDurationTypeChange = async (sessionId: number, newType: 'hourly' | 'per_minute') => {
-    try {
-      const response = await fetch(`/api/table-sessions/${sessionId}/update-duration`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          durationType: newType,
-          actualDuration: sessions[selectedTable?.id || 0]?.actualDuration || 0
-        }),
-      });
-
-      if (response.ok) {
-        showAlert('success', tAlerts('durationTypeUpdatedSuccess'));
-        fetchTables();
-        setShowDurationModal(false);
-      } else {
-        const error = await response.json();
-        showAlert('error', error.message || tAlerts('failedToUpdateDurationType'));
-      }
-    } catch (error) {
-      showAlert('error', tAlerts('failedToUpdateDurationType'));
-    }
   };
 
   const handleDurationUpdate = async (sessionId: number, newDuration: number) => {
     try {
-      const session = selectedSession || sessions[selectedTable?.id || 0];
+      const tableSession = selectedSession || sessions[selectedTable?.id || 0];
       const response = await fetch(`/api/table-sessions/${sessionId}/update-duration`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          durationType: session?.durationType || 'hourly',
+          durationType: tableSession?.durationType || 'hourly',
           actualDuration: newDuration
         }),
       });
@@ -799,11 +880,9 @@ const TablesManagement = () => {
 
       if (response.ok) {
         const paymentData = await response.json();
-        // Print receipt
         printCheckoutReceipt(paymentData, finalBillingData);
         setShowBillingModal(false);
         setBillingData(null);
-        // Redirect to transactions page with payment modal auto-open
         router.push(`/${locale}/transactions?paymentId=${paymentData.id}`);
       } else {
         const error = await response.json();
@@ -814,19 +893,18 @@ const TablesManagement = () => {
     }
   };
 
-  const printCheckoutReceipt = (paymentData: any, billingData: any) => {
-    const billing = billingData.billing;
-    const session = billingData.session;
+  const printCheckoutReceipt = (paymentData: any, billingDataParam: any) => {
+    const billing = billingDataParam.billing;
+    const tableSession = billingDataParam.session;
 
     const formatCurrencyReceipt = (amount: number) =>
       new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 
-    // Fetch store settings for receipt
     fetch('/api/admin/settings')
       .then(res => res.json())
       .then(data => {
         const s = data.settings || {};
-        const storeName = (s.store_name || 'CHALKBOARD BILLIARD').trim();
+        const storeName = (s.store_name || 'B3-BILLING BILLIARD BATAM').trim();
         const storeAddress = (s.store_address || '').trim();
         const storePhone = (s.store_phone || '').trim();
         const storeNotes = (s.store_notes || '').trim();
@@ -864,7 +942,7 @@ const TablesManagement = () => {
             <title>Receipt - ${paymentData.transactionNumber}</title>
             <style>
               @page { size: 80mm auto; margin: 0; }
-              body { font-family: 'Courier New', monospace; width: 72mm; max-width: 72mm; box-sizing: border-box; margin: 0 auto; padding: 10px; font-size: 12px; line-height: 1.4; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              body { font-family: 'Courier New', monospace; width: 72mm; max-width: 72mm; box-sizing: border-box; margin: 0 auto; padding: 10px; font-size: 12px; line-height: 1.4; }
               .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
               .header h1 { margin: 0; font-size: 16px; font-weight: bold; }
               .header p { margin: 2px 0; font-size: 10px; }
@@ -875,7 +953,6 @@ const TablesManagement = () => {
               .subtotal-row { display: flex; justify-content: space-between; margin: 2px 0; }
               .total-row { display: flex; justify-content: space-between; font-weight: bold; margin: 5px 0 2px 0; border-top: 1px solid #000; padding-top: 3px; }
               .footer { text-align: center; margin-top: 15px; font-size: 10px; border-top: 2px dashed #000; padding-top: 10px; }
-              @media print { html, body { width: 80mm; } body { margin: 0; padding: 4mm; } }
             </style>
           </head><body>
             <div class="header">
@@ -888,8 +965,7 @@ const TablesManagement = () => {
             </div>
 
             <div class="section">
-              <p><strong>Customer:</strong> ${session.customerName}</p>
-              ${session.customerPhone ? `<p><strong>Phone:</strong> ${session.customerPhone}</p>` : ''}
+              <p><strong>Customer:</strong> ${tableSession.customerName}</p>
             </div>
 
             <div class="section">
@@ -939,84 +1015,14 @@ const TablesManagement = () => {
         });
       })
       .catch(() => {
-        // Silently fail on receipt — payment was already saved
         console.error('Failed to print receipt');
       });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'available': return 'success';
-      case 'occupied': return 'error';
-      case 'maintenance': return 'warning';
-      case 'reserved': return 'info';
-      default: return 'muted';
-    }
-  };
-
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
-      case 'available': 
-        return { backgroundColor: '#22C55E', color: 'white' };
-      case 'occupied': 
-        return { backgroundColor: '#EF4444', color: 'white' };
-      case 'maintenance': 
-        return { backgroundColor: '#F59E0B', color: 'white' };
-      case 'reserved': 
-        return { backgroundColor: '#3B82F6', color: 'white' };
-      default: 
-        return { backgroundColor: '#6B7280', color: 'white' };
-    }
-  };
-
-  const getStatusBannerColor = (status: string) => {
-    switch (status) {
-      case 'available': 
-        return '#22C55E';
-      case 'occupied': 
-        return '#EF4444';
-      case 'maintenance': 
-        return '#F59E0B';
-      case 'reserved': 
-        return '#3B82F6';
-      default: 
-        return '#6B7280';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'available': return tCards('available');
-      case 'occupied': return tCards('occupied');
-      case 'maintenance': return tCards('maintenance');
-      case 'reserved': return tCards('reserved');
-      default: return status.toUpperCase();
-    }
-  };
-
-  const getStockStatus = (item: FnbItem) => {
-    if (item.stockQuantity <= 0) {
-      return { color: 'error', text: 'Out of Stock', bgColor: '#FEF2F2', textColor: '#EF4444' };
-    } else if (item.stockQuantity <= item.minStockLevel) {
-      return { color: 'warning', text: 'Low Stock', bgColor: '#FEF3C7', textColor: '#F59E0B' };
-    } else {
-      return { color: 'success', text: 'In Stock', bgColor: '#F0FDF4', textColor: '#22C55E' };
-    }
-  };
-
-  const formatCurrency = (amount: string | number) => {
-    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(numericAmount);
-  };
-
+  // Helper functions
   const calculateElapsedTime = (startTime: string) => {
     const start = new Date(startTime);
-    const elapsed = Math.floor((currentTime.getTime() - start.getTime()) / 1000); // Return total seconds
-    return elapsed;
+    return Math.floor((currentTime.getTime() - start.getTime()) / 1000);
   };
 
   const formatDuration = (totalSeconds: number) => {
@@ -1028,109 +1034,39 @@ const TablesManagement = () => {
 
   const formatTime = (dateTime: string | Date) => {
     const date = new Date(dateTime);
-    return date.toLocaleTimeString('id-ID', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: false 
-    });
+    return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
-  const calculatePlannedEndTime = (startTime: string, plannedDurationMinutes: number) => {
-    const start = new Date(startTime);
-    const end = new Date(start.getTime() + plannedDurationMinutes * 60 * 1000);
-    return end;
-  };
-
-  const calculateBillableHours = (totalSeconds: number) => {
-    // Round up to next hour - any partial hour counts as full hour
-    const minutes = totalSeconds / 60;
-    return Math.ceil(minutes / 60);
-  };
-
-  const calculateBillableMinutes = (totalSeconds: number) => {
-    // Round up to next minute if >30 seconds
-    const remainingSeconds = totalSeconds % 60;
-    const minutes = Math.floor(totalSeconds / 60);
-    return remainingSeconds > 30 ? minutes + 1 : minutes;
-  };
-
-  const calculateHourlyCost = (totalSeconds: number, hourlyRate: number) => {
-    const billableHours = calculateBillableHours(totalSeconds);
-    return billableHours * hourlyRate;
-  };
-
-  const calculatePerMinuteCost = (totalSeconds: number, perMinuteRate: number) => {
-    const billableMinutes = calculateBillableMinutes(totalSeconds);
-    return billableMinutes * perMinuteRate;
-  };
-
-  const calculateTableCost = (table: BilliardTable, totalSeconds: number) => {
-    const pricingPackage = table.pricingPackage;
+  const calculateCost = (table: BilliardTable, totalSeconds: number, tableSession?: TableSession) => {
+    const pricingPackage = (tableSession as any)?.pricingPackage || table.pricingPackage;
     if (!pricingPackage) return 0;
-    
-    // Use pricing package rates
+
     if (pricingPackage.category === 'per_minute') {
-      const rate = pricingPackage.perMinuteRate ? parseFloat(pricingPackage.perMinuteRate) : 0;
-      return calculatePerMinuteCost(totalSeconds, rate);
+      const rate = parseFloat(pricingPackage.perMinuteRate || '0');
+      const minutes = Math.ceil(totalSeconds / 60);
+      return minutes * rate;
     } else {
-      const rate = pricingPackage.hourlyRate ? parseFloat(pricingPackage.hourlyRate) : 0;
-      return calculateHourlyCost(totalSeconds, rate);
+      const rate = parseFloat(pricingPackage.hourlyRate || '0');
+      const hours = Math.ceil(totalSeconds / 3600);
+      return hours * rate;
     }
   };
 
-  const getBillingInfo = (table: BilliardTable, totalSeconds: number, session?: TableSession) => {
-    // Use pricing package information from session first, then table fallback
-    const pricingPackage = (session as any)?.pricingPackage || table.pricingPackage;
-    
-    if (!pricingPackage) {
-      // Fallback to default values if no pricing package
-      return {
-        type: 'hourly' as const,
-        billableHours: 0,
-        cost: 0,
-        rate: 0
-      };
-    }
-
-    // Determine billing type based on session preference first, then pricing package category
-    const sessionDurationType = session?.durationType;
-    const shouldUsePerMinute = sessionDurationType === 'per_minute' || 
-                              (!sessionDurationType && pricingPackage.category === 'per_minute');
-    
-    if (shouldUsePerMinute) {
-      const elapsed = totalSeconds;
-      const billableMinutes = calculateBillableMinutes(elapsed);
-      const rate = pricingPackage.perMinuteRate ? parseFloat(pricingPackage.perMinuteRate) : 0;
-      const cost = calculatePerMinuteCost(elapsed, rate);
-      return {
-        type: 'per_minute' as const,
-        billableMinutes,
-        cost,
-        rate: rate
-      };
+  const getStockStatus = (item: FnbItem) => {
+    if (item.stockQuantity <= 0) {
+      return { color: 'error', text: 'Out of Stock', bgColor: 'bg-rose-50', textColor: 'text-rose-600' };
+    } else if (item.stockQuantity <= item.minStockLevel) {
+      return { color: 'warning', text: 'Low Stock', bgColor: 'bg-amber-50', textColor: 'text-amber-600' };
     } else {
-      const elapsed = totalSeconds;
-      const billableHours = calculateBillableHours(elapsed);
-      const rate = pricingPackage.hourlyRate ? parseFloat(pricingPackage.hourlyRate) : 0;
-      const cost = calculateHourlyCost(elapsed, rate);
-      return {
-        type: 'hourly' as const,
-        billableHours,
-        cost,
-        rate: rate
-      };
+      return { color: 'success', text: 'In Stock', bgColor: 'bg-emerald-50', textColor: 'text-emerald-600' };
     }
   };
 
-  const filteredItems = items.filter(item => {
-    // Filter by category
+  const filteredFnbItems = items.filter(item => {
     const categoryMatch = activeCategory ? item.categoryId === activeCategory : true;
-    
-    // Filter by search query
-    const searchMatch = searchQuery.trim() === '' || 
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    
+    const searchMatch = fnbSearchQuery.trim() === '' || 
+      item.name.toLowerCase().includes(fnbSearchQuery.toLowerCase()) ||
+      (item.description && item.description.toLowerCase().includes(fnbSearchQuery.toLowerCase()));
     return categoryMatch && searchMatch;
   });
 
@@ -1142,274 +1078,312 @@ const TablesManagement = () => {
     );
   }
 
-  if (status === "unauthenticated") {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <DefaultSpinner />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
-      {/* Alert */}
-      {alert && (
-        <Alert color={alert.type} className="mb-4">
-          {alert.message}
-        </Alert>
+      {/* Welcome Hints */}
+      {showHints && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Hint type="info" title="Quick Start Guide" dismissible onDismiss={() => setShowHints(false)}>
+            <p>Click on a table card to manage sessions. Green cards are available, red cards are occupied.</p>
+          </Hint>
+          <Hint type="tip" title="Pro Tip">
+            <p>Use the search bar to quickly find tables or customers. Pin frequently used tables for quick access.</p>
+          </Hint>
+        </div>
       )}
 
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-dark dark:text-white">
-            {t('title')}
-          </h1>
-          <p className="text-bodytext mt-1">
-            {t('subtitle')}
-          </p>
+      {/* Header with Stats */}
+      <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-dark dark:text-white">{t('title')}</h1>
+            <p className="text-bodytext mt-1">{t('subtitle')}</p>
+          </div>
+          
+          {/* Stats Pills */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl">
+              <span className="text-sm text-bodytext">Total:</span>
+              <span className="font-bold text-dark dark:text-white">{stats.total}</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="font-semibold text-emerald-700 dark:text-emerald-300">{stats.available}</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-rose-100 dark:bg-rose-900/30 rounded-xl">
+              <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <span className="font-semibold text-rose-700 dark:text-rose-300">{stats.occupied}</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
+              <div className="w-2 h-2 rounded-full bg-amber-500" />
+              <span className="font-semibold text-amber-700 dark:text-amber-300">{stats.maintenance}</span>
+            </div>
+          </div>
         </div>
+      </div>
+
+      {/* Toolbar */}
+      <Toolbar>
+        <ToolbarGroup className="flex-1">
+          <SearchAutocomplete
+            items={searchItems}
+            onSelect={(item) => {
+              const table = tables.find(t => t.id === item.id);
+              if (table) {
+                if (table.status === 'occupied') {
+                  openFnbModal(table);
+                } else {
+                  openSessionModal(table);
+                }
+              }
+            }}
+            placeholder="Search tables, customers..."
+            className="w-full max-w-md"
+          />
+        </ToolbarGroup>
+        
+        <ToolbarDivider />
+        
+        <ToolbarGroup>
+          {STATUS_FILTERS.map(filter => (
+            <button
+              key={filter.value}
+              onClick={() => setStatusFilter(filter.value)}
+              className={`
+                px-4 py-2 rounded-xl text-sm font-medium transition-all
+                ${statusFilter === filter.value
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'bg-gray-100 dark:bg-gray-800 text-bodytext hover:bg-gray-200 dark:hover:bg-gray-700'
+                }
+              `}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </ToolbarGroup>
+        
+        <ToolbarDivider />
+        
+        <ToolbarGroup>
+          <AutoRefreshIndicator
+            isRefreshing={isRefreshing}
+            lastRefresh={lastRefresh}
+            interval={30}
+            onManualRefresh={fetchTables}
+          />
+        </ToolbarGroup>
+        
+        <ToolbarDivider />
+        
         <Button color="primary" onClick={() => setShowCreateModal(true)}>
           <IconPlus className="w-4 h-4 mr-2" />
           {t('addNewTable')}
         </Button>
-      </div>
+      </Toolbar>
 
-      {/* Tables Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {tables.map((table) => {
-          const session = sessions[table.id];
+      {/* Tables Grid - 36 tables max per screen (6x6) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        {filteredTables.slice(0, 36).map((table) => {
+          const tableSession = sessions[table.id];
           const isOccupied = table.status === 'occupied';
-          const elapsedTime = session ? calculateElapsedTime(session.startTime) : 0;
-          const billingInfo = getBillingInfo(table, elapsedTime, session);
-          const plannedEndTime = session ? calculatePlannedEndTime(session.startTime, session.plannedDuration) : null;
+          const elapsedTime = tableSession ? calculateElapsedTime(tableSession.startTime) : 0;
+          const cost = calculateCost(table, elapsedTime, tableSession);
+          const isPinned = pinnedTables.includes(table.id);
+          const colors = cardColors[table.status] || cardColors.available;
 
           return (
             <div
               key={table.id}
-              className="bg-white dark:bg-darkgray rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 overflow-hidden"
-              role="article"
-              aria-label={`Table ${table.name} - ${table.status}`}
+              className={`
+                relative rounded-2xl overflow-hidden
+                bg-gradient-to-br ${colors.gradient}
+                border-2 ${colors.border}
+                shadow-md hover:shadow-xl
+                transition-all duration-300 ease-out
+                hover:-translate-y-1
+                ${isPinned ? 'ring-2 ring-primary ring-offset-2' : ''}
+              `}
             >
-              {/* Status Banner */}
-              <div 
-                className="h-3 w-full"
-                style={{ backgroundColor: getStatusBannerColor(table.status) }}
-                aria-hidden="true"
-              />
-              
+              {/* Status Header */}
+              <div className={`h-1.5 w-full ${colors.header}`} />
+
+              {/* Pin indicator */}
+              {isPinned && (
+                <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 2a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 2zM10 15a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 15zM10 7a3 3 0 100 6 3 3 0 000-6z" />
+                  </svg>
+                </div>
+              )}
+
               {/* Card Content */}
-              <div className="p-4">
+              <div className="p-3">
                 {/* Header */}
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-dark dark:text-white mb-1">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-bold text-dark dark:text-white truncate">
                       {table.name}
                     </h3>
-                    <div className="text-xs text-bodytext space-y-1">
-                      {(() => {
-                        const activePricingPackage = (session as any)?.pricingPackage || table.pricingPackage;
-                        return activePricingPackage ? (
-                          <>
-                            <div className="flex items-center gap-1">
-                              <IconPackage className="h-3 w-3" />
-                              <span className="font-medium">{activePricingPackage.name}</span>
-                              {activePricingPackage.isDefault && <Badge color="info" size="xs">Default</Badge>}
-                              {isOccupied && (session as any)?.pricingPackage && <Badge color="success" size="xs">Active</Badge>}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <IconCurrencyDollar className="h-3 w-3" />
-                              <span>
-                                {activePricingPackage.category === 'hourly' 
-                                  ? `${formatCurrency(activePricingPackage.hourlyRate || '0')}/hr`
-                                  : `${formatCurrency(activePricingPackage.perMinuteRate || '0')}/min`
-                                }
-                              </span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            <IconPackage className="h-3 w-3" />
-                            <span className="text-bodytext">No pricing package assigned</span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    {isOccupied && session && (
-                      <p className="text-sm text-bodytext mt-1">
-                        {session.customerName}
+                    {table.pricingPackage && (
+                      <p className="text-[10px] text-bodytext truncate">
+                        {table.pricingPackage.name}
                       </p>
                     )}
                   </div>
-                  <Badge 
-                    color={getStatusColor(table.status)} 
-                    size="sm"
-                    style={getStatusBadgeStyle(table.status)}
-                  >
-                    {getStatusText(table.status)}
-                  </Badge>
+                  <StatusBadge status={table.status as any} size="xs" pulse={isOccupied} />
                 </div>
 
-                {/* Session Information */}
-                <div className="space-y-3 mb-4">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-bodytext">{tCards('startTime')}:</span>
-                    <span className="font-medium text-dark dark:text-white">
-                      {isOccupied && session ? formatTime(session.startTime) : '--:--'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-bodytext">{tCards('endTime')}:</span>
-                    <span className="font-medium text-dark dark:text-white">
-                      {isOccupied && session && session.plannedDuration > 0 && plannedEndTime ? formatTime(plannedEndTime) : '--:--'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-bodytext">{tCards('duration')}:</span>
-                    <span className="font-medium text-dark dark:text-white font-mono">
-                      {isOccupied && session
-                        ? (session.plannedDuration > 0
-                          ? formatDuration(Math.max(session.plannedDuration * 60 - elapsedTime, 0))
-                          : formatDuration(elapsedTime))
-                        : '--:--:--'}
-                    </span>
-                  </div>
-
-                  {/* Cost Information */}
-                  {isOccupied && session && (
-                    <div className="pt-2 border-t border-lightborder dark:border-darkborder">
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-bodytext">{tCards('cost')}:</span>
-                        <span className="font-bold text-primary">
-                          {formatCurrency(billingInfo.cost.toString())}
+                {/* Session Info */}
+                {isOccupied && tableSession && (
+                  <div className="space-y-1.5 mb-3">
+                    <p className="text-xs font-medium text-dark dark:text-white truncate">
+                      {tableSession.customerName}
+                    </p>
+                    <div className="flex items-center justify-between text-[10px] text-bodytext">
+                      <span>Start: {formatTime(tableSession.startTime)}</span>
+                    </div>
+                    <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-bodytext">Duration</span>
+                        <span className="text-sm font-bold font-mono text-dark dark:text-white">
+                          {formatDuration(elapsedTime)}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-xs text-bodytext">
-                        <p>{billingInfo.type}{session.plannedDuration > 0 ? ' (planned)' : ' (open)'}</p>
-                        {billingInfo.type === 'per_minute' ? (
-                          <span>({billingInfo.billableMinutes} min × {formatCurrency(billingInfo.rate.toString())})</span>
-                        ) : (
-                          <span>({billingInfo.billableHours} jam × {formatCurrency(billingInfo.rate.toString())})</span>
-                        )}
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs text-bodytext">Cost</span>
+                        <span className="text-sm font-bold text-primary">
+                          {formatCurrency(cost)}
+                        </span>
                       </div>
                     </div>
-                  )}
-                </div>
-
-                {/* Action Buttons */}
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    {isOccupied && <Button
-                      color="secondary"
-                      size="xs"
-                      className="flex-1"
-                      onClick={() => openFnbModal(table)}
-                    >
-                      <IconToolsKitchen2 className="w-3 h-3 mr-1" />
-                      {tCards('fnbButton')}
-                    </Button>}
-                    
-                    {isOccupied ? (
-                      <Button
-                        color="error"
-                        size="xs"
-                        className="flex-1"
-                        onClick={() => { setTableToStop(table); setShowStopConfirmModal(true); }}
-                      >
-                        <IconPlayerStop className="w-3 h-3 mr-1" />
-                        {tCards('stopButton')}
-                      </Button>
-                    ) : (
-                      <Button
-                        color="primary"
-                        size="xs"
-                        className="flex-1"
-                        onClick={() => openSessionModal(table)}
-                      >
-                        <IconPlayerPlay className="w-3 h-3 mr-1" />
-                        {tCards('startButton')}
-                      </Button>
-                    )}
                   </div>
-                  
-                  {/* Additional Actions for Occupied Tables */}
-                  {isOccupied && session && (
-                    <div className="flex gap-2">
-                      <Button
-                        color="light"
-                        size="xs"
-                        className="flex-1"
-                        onClick={() => openDurationModal(table, session)}
+                )}
+
+                {/* Actions */}
+                <div className="space-y-2">
+                  {isOccupied ? (
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => openFnbModal(table)}
+                        className="flex-1 flex items-center justify-center gap-1 py-2 px-2 rounded-xl bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors"
+                        title="Add F&B Order"
                       >
-                        <IconClock className="w-3 h-3 mr-1" />
-                        {tCommon('duration')}
-                      </Button>
-                      <Button
-                        color="light"
-                        size="xs"
-                        className="flex-1"
-                        onClick={() => openMoveSessionModal(table, session)}
+                        <IconToolsKitchen2 className="w-3.5 h-3.5" />
+                        F&B
+                      </button>
+                      <button
+                        onClick={() => { setTableToStop(table); setShowStopConfirmModal(true); }}
+                        className="flex-1 flex items-center justify-center gap-1 py-2 px-2 rounded-xl bg-rose-500 text-white text-xs font-medium hover:bg-rose-600 transition-colors"
+                        title="End Session"
                       >
-                        <IconTransfer className="w-3 h-3 mr-1" />
-                        {tCommon('move')}
-                      </Button>
+                        <IconPlayerStop className="w-3.5 h-3.5" />
+                        Stop
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => openSessionModal(table)}
+                      className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors"
+                      title="Start Session"
+                    >
+                      <IconPlayerPlay className="w-4 h-4" />
+                      Start
+                    </button>
+                  )}
+
+                  {/* Secondary Actions */}
+                  {isOccupied && tableSession && (
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => openDurationModal(table, tableSession)}
+                        className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-bodytext text-[10px] font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                        title="Manage Duration"
+                      >
+                        <IconClock className="w-3 h-3" />
+                        Duration
+                      </button>
+                      <button
+                        onClick={() => openMoveSessionModal(table, tableSession)}
+                        className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-bodytext text-[10px] font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                        title="Move Session"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                        Move
+                      </button>
+                    </div>
+                  )}
+
+                  {!isOccupied && (
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => openEditModal(table)}
+                        className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-bodytext text-[10px] font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                        title="Edit Table"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => togglePin(table.id)}
+                        className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[10px] font-medium transition-colors ${
+                          isPinned 
+                            ? 'bg-primary text-white' 
+                            : 'bg-gray-100 dark:bg-gray-800 text-bodytext hover:bg-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                        title={isPinned ? 'Unpin' : 'Pin'}
+                      >
+                        {isPinned ? 'Unpin' : 'Pin'}
+                      </button>
                     </div>
                   )}
                 </div>
-
-                {/* Admin Actions (Hidden by default, can be toggled) */}
-                {!isOccupied && <div className="mt-2 pt-2 border-t border-lightborder dark:border-darkborder">
-                  <div className="flex flex-col gap-2">
-                                          <Button
-                        color="light"
-                        size="xs"
-                        onClick={() => openEditModal(table)}
-                        className="text-xs"
-                      >
-                        <IconEdit className="w-3 h-3 mr-1" />
-                        {tCards('editButton')}
-                      </Button>
-                      <Button
-                        color="light"
-                        size="xs"
-                        onClick={() => openDeleteModal(table)}
-                        className="text-xs text-red-600 hover:text-red-800"
-                      >
-                        <IconTrash className="w-3 h-3 mr-1" />
-                        {tCards('deleteButton')}
-                      </Button>
-                  </div>
-                </div>}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Empty State */}
-      {tables.length === 0 && (
-        <div className="text-center py-12">
-          <div className="max-w-md mx-auto">
-            <div className="w-24 h-24 mx-auto mb-4 bg-lightprimary rounded-full flex items-center justify-center">
-              <IconPlus className="w-12 h-12 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold text-dark dark:text-white mb-2">
-              {t('noTables.title')}
-            </h3>
-            <p className="text-bodytext mb-4">
-              {t('noTables.subtitle')}
-            </p>
-          </div>
+      {/* Pagination hint */}
+      {filteredTables.length > 36 && (
+        <div className="text-center py-4">
+          <p className="text-sm text-bodytext">
+            Showing 36 of {filteredTables.length} tables. Use filters to narrow down results.
+          </p>
         </div>
       )}
 
+      {/* Empty State */}
+      {filteredTables.length === 0 && (
+        <div className="text-center py-16 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+          <div className="w-20 h-20 mx-auto mb-4 bg-primary/10 rounded-2xl flex items-center justify-center">
+            <IconSearch className="w-10 h-10 text-primary" />
+          </div>
+          <h3 className="text-xl font-semibold text-dark dark:text-white mb-2">
+            {searchQuery ? 'No tables found' : t('noTables.title')}
+          </h3>
+          <p className="text-bodytext mb-4 max-w-md mx-auto">
+            {searchQuery 
+              ? `No tables match "${searchQuery}". Try a different search term or clear filters.`
+              : t('noTables.subtitle')
+            }
+          </p>
+          {searchQuery && (
+            <Button color="light" onClick={() => { setSearchQuery(''); setStatusFilter('all'); }}>
+              Clear Filters
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* All Modals - keeping existing functionality */}
       {/* F&B Modal */}
       <Modal show={showFnbModal} onClose={() => setShowFnbModal(false)} size="7xl">
         <Modal.Header>
           <div className="flex items-center gap-3">
-            <IconToolsKitchen2 className="w-6 h-6 text-primary" />
+            <div className="p-2 bg-amber-100 rounded-xl">
+              <IconToolsKitchen2 className="w-6 h-6 text-amber-600" />
+            </div>
             <div>
               <h3 className="text-xl font-semibold">F&B Order - {selectedTable?.name}</h3>
               <p className="text-sm text-bodytext">
@@ -1421,13 +1395,13 @@ const TablesManagement = () => {
         <Modal.Body>
           {fnbLoading ? (
             <div className="flex justify-center items-center py-12">
-              <div className="text-lg">{tCommon('loadingFnBMenu')}</div>
+              <DefaultSpinner />
             </div>
           ) : (
             <div className="flex gap-6 h-[600px]">
               {/* Left Pane - Menu Items */}
               <div className="flex-1">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 h-full">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 h-full">
                   <h3 className="text-lg font-semibold text-dark dark:text-white mb-4">
                     {tCommon('menuItems')}
                   </h3>
@@ -1440,8 +1414,8 @@ const TablesManagement = () => {
                     <TextInput
                       type="search"
                       placeholder="Search menu items..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      value={fnbSearchQuery}
+                      onChange={(e) => setFnbSearchQuery(e.target.value)}
                       className="pl-10"
                     />
                   </div>
@@ -1454,7 +1428,7 @@ const TablesManagement = () => {
                       onClick={() => setActiveCategory(null)}
                       className="whitespace-nowrap"
                     >
-                      All Categories
+                      All
                     </Button>
                     {categories.map(category => (
                       <Button
@@ -1469,266 +1443,164 @@ const TablesManagement = () => {
                     ))}
                   </div>
 
-                  {/* Items List */}
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {filteredItems.map(item => {
+                  {/* Items Grid */}
+                  <div className="grid grid-cols-2 gap-2 max-h-[420px] overflow-y-auto">
+                    {filteredFnbItems.map(item => {
                       const stockStatus = getStockStatus(item);
                       const isOutOfStock = item.stockQuantity <= 0;
                       
                       return (
                         <div
                           key={item.id}
-                          className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all ${
-                            isOutOfStock ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-md cursor-pointer'
-                          }`}
-                          style={{
-                            backgroundColor: stockStatus.bgColor,
-                            borderColor: stockStatus.textColor
-                          }}
+                          onClick={() => !isOutOfStock && addToCart(item)}
+                          className={`
+                            p-3 rounded-xl border-2 transition-all cursor-pointer
+                            ${isOutOfStock 
+                              ? 'opacity-50 cursor-not-allowed border-gray-200' 
+                              : `hover:shadow-md hover:-translate-y-0.5 ${stockStatus.bgColor} border-transparent`
+                            }
+                          `}
                         >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-start mb-1">
-                              <h4 className="font-semibold text-dark dark:text-white text-sm truncate">
-                                {item.name}
-                              </h4>
-                              <Badge 
-                                color={stockStatus.color} 
-                                size="xs"
-                                style={{ backgroundColor: stockStatus.textColor, color: 'white' }}
-                              >
-                                {stockStatus.text}
-                              </Badge>
-                            </div>
-                            
-                            {item.description && (
-                              <p className="text-xs text-bodytext mb-1 line-clamp-1">
-                                {item.description}
-                              </p>
-                            )}
-                            
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className="font-bold text-primary text-sm">
-                                  {formatCurrency(parseFloat(item.price))}
-                                </p>
-                                <p className="text-xs text-bodytext">
-                                  Stock: {item.stockQuantity} {item.unit}
-                                </p>
-                              </div>
-                            </div>
+                          <div className="flex justify-between items-start mb-1">
+                            <h4 className="font-medium text-dark dark:text-white text-sm truncate flex-1">
+                              {item.name}
+                            </h4>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${stockStatus.bgColor} ${stockStatus.textColor}`}>
+                              {item.stockQuantity}
+                            </span>
                           </div>
-                          
-                          {!isOutOfStock && (
-                            <Button
-                              color="primary"
-                              size="xs"
-                              onClick={() => addToCart(item)}
-                              className="ml-2"
-                            >
-                              <IconChevronRight className="w-4 h-4" />
-                            </Button>
-                          )}
+                          <p className="font-bold text-primary text-sm">
+                            {formatCurrency(parseFloat(item.price))}
+                          </p>
                         </div>
                       );
                     })}
                   </div>
-
-                  {filteredItems.length === 0 && (
-                    <div className="text-center py-8">
-                      <p className="text-bodytext">
-                        {searchQuery.trim() !== '' ? 'No items found matching your search' : 'No items found in this category'}
-                      </p>
-                      {searchQuery.trim() !== '' && (
-                        <Button color="light" size="xs" className="mt-2" onClick={() => setSearchQuery('')}>
-                          Clear search
-                        </Button>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Right Pane - Cart & Existing Orders */}
-              <div className="flex-1">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 h-full">
-                  <div className="h-full flex flex-col">
-                    {/* Existing Orders Section */}
-                    {existingOrders.length > 0 && (
-                      <div className="mb-6">
-                        <h3 className="text-lg font-semibold text-dark dark:text-white mb-3">
-                          {tCommon('currentOrders')}
-                        </h3>
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
-                          {existingOrders.map(order => (
-                            <div key={order.id} className="p-2 bg-blue-50 dark:bg-blue-900 rounded border">
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="text-sm font-medium">Order #{order.orderNumber}</span>
-                                <span className="text-sm font-bold text-primary">
-                                  {formatCurrency(parseFloat(order.total))}
-                                </span>
-                              </div>
-                              <div className="space-y-1">
-                                {order.items.map(orderItem => (
-                                  <div key={orderItem.id} className="flex items-center justify-between text-xs">
-                                    <span className="flex-1 truncate">{orderItem.itemName} x{orderItem.quantity}</span>
-                                    <Button
-                                      color="secondary"
-                                      size="xs"
-                                      onClick={() => addFromExistingToCart(orderItem)}
-                                      className="ml-1"
-                                    >
-                                      <IconChevronLeft className="w-3 h-3" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
+              {/* Right Pane - Cart */}
+              <div className="w-96">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 h-full flex flex-col">
+                  {/* Existing Orders */}
+                  {existingOrders.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-semibold text-dark dark:text-white mb-2">Current Orders</h4>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {existingOrders.map(order => (
+                          <div key={order.id} className="p-2 bg-sky-50 dark:bg-sky-900/30 rounded-lg border border-sky-200 dark:border-sky-800">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-medium">#{order.orderNumber}</span>
+                              <span className="font-bold text-primary">{formatCurrency(parseFloat(order.total))}</span>
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {/* Cart Section */}
-                    <div className="flex-1">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-semibold text-dark dark:text-white">
-                          {tCommon('newOrder')} ({cart.length})
-                        </h3>
-                        {cart.length > 0 && (
-                          <Button
-                            color="error"
-                            size="xs"
-                            onClick={clearCart}
-                          >
-                            <IconTrash className="w-3 h-3 mr-1" />
-                            {tCommon('clear')}
-                          </Button>
-                        )}
-                      </div>
-
-                      {cart.length === 0 ? (
-                        <div className="text-center py-8">
-                          <IconShoppingCart className="w-12 h-12 text-bodytext mx-auto mb-2" />
-                          <p className="text-bodytext text-sm">{tCommon('cartIsEmpty')}</p>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="space-y-2 max-h-40 overflow-y-auto mb-4">
-                            {cart.map(item => (
-                              <div key={item.id} className="flex items-center justify-between p-2 bg-white dark:bg-gray-700 rounded">
-                                <Button
-                                  color="secondary"
-                                  size="xs"
-                                  onClick={() => moveFromCartToMenu(item)}
-                                  className="mr-2"
-                                >
-                                  <IconChevronLeft className="w-3 h-3" />
-                                </Button>
-                                <div className="flex-1 min-w-0">
-                                  <h5 className="text-sm font-medium text-dark dark:text-white truncate">
-                                    {item.name}
-                                  </h5>
-                                  <p className="text-xs text-bodytext">
-                                    {formatCurrency(parseFloat(item.price))} / {item.unit}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    color="secondary"
-                                    size="xs"
-                                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                  >
-                                    <IconMinus className="w-2 h-2" />
-                                  </Button>
-                                  <span className="w-8 text-center text-xs font-medium">
-                                    {item.quantity}
-                                  </span>
-                                  <Button
-                                    color="secondary"
-                                    size="xs"
-                                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                  >
-                                    <IconPlus className="w-2 h-2" />
-                                  </Button>
-                                  <Button
-                                    color="error"
-                                    size="xs"
-                                    onClick={() => removeFromCart(item.id)}
-                                    className="ml-1"
-                                  >
-                                    <IconX className="w-2 h-2" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Staff Selection */}
-                          <div className="mb-4">
-                            <Label htmlFor="staffSelect" value={`${tCommon('staffMember')} *`} className="text-sm" />
-                            <Select
-                              id="staffSelect"
-                              value={selectedStaffId}
-                              onChange={(e) => setSelectedStaffId(e.target.value)}
-                              required
-                            >
-                              <option value="">{tCommon('selectStaff')}</option>
-                              {staff.filter(s => s.isActive).map(staffMember => (
-                                <option key={staffMember.id} value={staffMember.id}>
-                                  {staffMember.name} - {staffMember.role}
-                                </option>
-                              ))}
-                            </Select>
-                          </div>
-
-                          {/* Order Summary */}
-                          <div className="border-t pt-3 space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span>Subtotal:</span>
-                              <span>{formatCurrency(calculateTotal())}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>{formatTaxLabel(taxSettings)}:</span>
-                              <span>{formatCurrency(calculateTax(calculateTotal()))}</span>
-                            </div>
-                            <div className="flex justify-between font-bold text-base border-t pt-2">
-                              <span>Total:</span>
-                              <span className="text-primary">
-                                {formatCurrency(calculateTotal() + calculateTax(calculateTotal()))}
-                              </span>
-                            </div>
-                          </div>
-
-                          <Button
-                            color="primary"
-                            className="w-full mt-4"
-                            onClick={processFnbOrder}
-                            disabled={!selectedStaffId}
-                          >
-                            <IconCheck className="w-4 h-4 mr-2" />
-                            {tPOS('checkout.buttons.addToTableBill')}
-                          </Button>
-                        </>
+                  {/* Cart */}
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-sm font-semibold text-dark dark:text-white">
+                        New Order ({cart.length})
+                      </h4>
+                      {cart.length > 0 && (
+                        <button onClick={clearCart} className="text-xs text-rose-600 hover:text-rose-700">
+                          Clear
+                        </button>
                       )}
                     </div>
+
+                    {cart.length === 0 ? (
+                      <div className="text-center py-8">
+                        <IconShoppingCart className="w-12 h-12 text-bodytext mx-auto mb-2" />
+                        <p className="text-sm text-bodytext">Cart is empty</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {cart.map(item => (
+                          <div key={item.id} className="flex items-center gap-2 p-2 bg-white dark:bg-gray-700 rounded-lg">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{item.name}</p>
+                              <p className="text-xs text-bodytext">{formatCurrency(parseFloat(item.price))}</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-600 flex items-center justify-center"
+                              >
+                                <IconMinus className="w-3 h-3" />
+                              </button>
+                              <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
+                              <button
+                                onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-600 flex items-center justify-center"
+                              >
+                                <IconPlus className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => removeFromCart(item.id)}
+                                className="w-6 h-6 rounded bg-rose-100 text-rose-600 flex items-center justify-center ml-1"
+                              >
+                                <IconX className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Staff Selection & Total */}
+                  {cart.length > 0 && (
+                    <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-600">
+                      <div className="mb-3">
+                        <Label htmlFor="staffSelect" value="Staff *" className="text-xs" />
+                        <Select
+                          id="staffSelect"
+                          value={selectedStaffId}
+                          onChange={(e) => setSelectedStaffId(e.target.value)}
+                          sizing="sm"
+                        >
+                          <option value="">Select staff</option>
+                          {staff.filter(s => s.isActive).map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-1 text-sm mb-3">
+                        <div className="flex justify-between">
+                          <span>Subtotal</span>
+                          <span>{formatCurrency(calculateTotal())}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>{formatTaxLabel(taxSettings)}</span>
+                          <span>{formatCurrency(calculateTax(calculateTotal()))}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-base pt-2 border-t">
+                          <span>Total</span>
+                          <span className="text-primary">{formatCurrency(calculateTotal() + calculateTax(calculateTotal()))}</span>
+                        </div>
+                      </div>
+
+                      <Button
+                        color="primary"
+                        className="w-full"
+                        onClick={processFnbOrder}
+                        disabled={!selectedStaffId}
+                      >
+                        <IconCheck className="w-4 h-4 mr-2" />
+                        Add to Bill
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
         </Modal.Body>
-        <Modal.Footer>
-          <Button color="secondary" onClick={() => {
-            setShowFnbModal(false);
-            clearCart();
-            setSelectedTable(null);
-            setSelectedStaffId('');
-            setExistingOrders([]);
-            setSearchQuery('');
-          }}>
-            {tCommon('close')}
-          </Button>
-        </Modal.Footer>
       </Modal>
 
       {/* Create Table Modal */}
@@ -1799,12 +1671,8 @@ const TablesManagement = () => {
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button color="primary" onClick={handleUpdateTable}>
-            Update Table
-          </Button>
-          <Button color="secondary" onClick={() => setShowEditModal(false)}>
-            Cancel
-          </Button>
+          <Button color="primary" onClick={handleUpdateTable}>Update Table</Button>
+          <Button color="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>
         </Modal.Footer>
       </Modal>
 
@@ -1813,17 +1681,12 @@ const TablesManagement = () => {
         <Modal.Header>Delete Table</Modal.Header>
         <Modal.Body>
           <p className="text-bodytext">
-            Are you sure you want to delete <strong>{selectedTable?.name}</strong>? 
-            This action cannot be undone.
+            Are you sure you want to delete <strong>{selectedTable?.name}</strong>? This action cannot be undone.
           </p>
         </Modal.Body>
         <Modal.Footer>
-          <Button color="error" onClick={handleDeleteTable}>
-            Delete
-          </Button>
-          <Button color="secondary" onClick={() => setShowDeleteModal(false)}>
-            Cancel
-          </Button>
+          <Button color="error" onClick={handleDeleteTable}>Delete</Button>
+          <Button color="secondary" onClick={() => setShowDeleteModal(false)}>Cancel</Button>
         </Modal.Footer>
       </Modal>
 
@@ -1832,6 +1695,9 @@ const TablesManagement = () => {
         <Modal.Header>{tSessionModal('startTitle', { tableName: selectedTable?.name || '' })}</Modal.Header>
         <Modal.Body>
           <div className="space-y-4">
+            <Hint type="info">
+              <p>Enter customer name and select a pricing package to start the session.</p>
+            </Hint>
             <div>
               <Label htmlFor="customerName" value={tSessionModal('customerLabel')} />
               <TextInput
@@ -1874,41 +1740,20 @@ const TablesManagement = () => {
               </Select>
             </div>
             {sessionData.mode === 'planned' && (
-              <>
-                <div>
-                  <Label htmlFor="plannedDuration" value={tSessionModal('plannedDurationLabel')} />
-                  <Select
-                    id="plannedDuration"
-                    value={sessionData.plannedDuration}
-                    onChange={(e) => setSessionData({ ...sessionData, plannedDuration: parseInt(e.target.value) })}
-                  >
-                    <option value={30}>{tSessionModal('durationOptions.30minutes')}</option>
-                    <option value={60}>{tSessionModal('durationOptions.60minutes')}</option>
-                    <option value={90}>{tSessionModal('durationOptions.90minutes')}</option>
-                    <option value={120}>{tSessionModal('durationOptions.120minutes')}</option>
-                    <option value={180}>{tSessionModal('durationOptions.180minutes')}</option>
-                  </Select>
-                </div>
-                <div className="p-3 bg-lightinfo rounded-lg">
-                  <p className="text-sm text-info">
-                    <IconCurrencyDollar className="w-4 h-4 inline mr-1" />
-                    Estimated cost: {(() => {
-                      const selectedPackage = pricingPackages.find(p => p.id === sessionData.pricingPackageId);
-                      if (!selectedPackage) return formatCurrency('0');
-                      
-                      if (selectedPackage.category === 'hourly') {
-                        return formatCurrency(
-                          ((sessionData.plannedDuration / 60) * parseFloat(selectedPackage.hourlyRate || '0')).toString()
-                        );
-                      } else {
-                        return formatCurrency(
-                          (sessionData.plannedDuration * parseFloat(selectedPackage.perMinuteRate || '0')).toString()
-                        );
-                      }
-                    })()}
-                  </p>
-                </div>
-              </>
+              <div>
+                <Label htmlFor="plannedDuration" value={tSessionModal('plannedDurationLabel')} />
+                <Select
+                  id="plannedDuration"
+                  value={sessionData.plannedDuration}
+                  onChange={(e) => setSessionData({ ...sessionData, plannedDuration: parseInt(e.target.value) })}
+                >
+                  <option value={30}>{tSessionModal('durationOptions.30minutes')}</option>
+                  <option value={60}>{tSessionModal('durationOptions.60minutes')}</option>
+                  <option value={90}>{tSessionModal('durationOptions.90minutes')}</option>
+                  <option value={120}>{tSessionModal('durationOptions.120minutes')}</option>
+                  <option value={180}>{tSessionModal('durationOptions.180minutes')}</option>
+                </Select>
+              </div>
             )}
           </div>
         </Modal.Body>
@@ -1917,9 +1762,7 @@ const TablesManagement = () => {
             <IconPlayerPlay className="w-4 h-4 mr-2" />
             Start Session
           </Button>
-          <Button color="secondary" onClick={() => setShowSessionModal(false)}>
-            Cancel
-          </Button>
+          <Button color="secondary" onClick={() => setShowSessionModal(false)}>Cancel</Button>
         </Modal.Footer>
       </Modal>
 
@@ -1945,9 +1788,7 @@ const TablesManagement = () => {
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button color="secondary" onClick={() => setShowDurationModal(false)}>
-            {tCommon('close')}
-          </Button>
+          <Button color="secondary" onClick={() => setShowDurationModal(false)}>{tCommon('close')}</Button>
         </Modal.Footer>
       </Modal>
 
@@ -1960,10 +1801,10 @@ const TablesManagement = () => {
               {t('stopConfirmation.message', { tableName: tableToStop?.name || '' })}
             </p>
             {tableToStop && sessions[tableToStop.id] && (
-              <div className="bg-lightgray dark:bg-darkgray p-3 rounded-lg">
+              <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-xl">
                 <p className="text-sm text-bodytext">
                   {t('stopConfirmation.currentDuration')}:{' '}
-                  <span className="font-medium text-dark dark:text-white">
+                  <span className="font-bold text-dark dark:text-white">
                     {Math.floor(calculateElapsedTime(sessions[tableToStop.id].startTime) / 60)} {tCommon('minutes')}
                   </span>
                 </p>
@@ -1975,19 +1816,14 @@ const TablesManagement = () => {
           <Button
             color="error"
             onClick={() => {
-              if (tableToStop) {
-                handleEndSession(tableToStop.id);
-              }
+              if (tableToStop) handleEndSession(tableToStop.id);
               setShowStopConfirmModal(false);
               setTableToStop(null);
             }}
           >
             {t('stopConfirmation.confirm')}
           </Button>
-          <Button
-            color="secondary"
-            onClick={() => { setShowStopConfirmModal(false); setTableToStop(null); }}
-          >
+          <Button color="secondary" onClick={() => { setShowStopConfirmModal(false); setTableToStop(null); }}>
             {t('stopConfirmation.cancel')}
           </Button>
         </Modal.Footer>
@@ -1997,14 +1833,24 @@ const TablesManagement = () => {
       <MoveSessionModal
         show={showMoveSessionModal}
         onClose={() => setShowMoveSessionModal(false)}
-        sessionId={selectedSession?.id || 0}
         currentTableId={selectedTable?.id || 0}
         currentTableName={selectedTable?.name || ''}
+        sessionId={selectedSession?.id || 0}
         customerName={selectedSession?.customerName || ''}
-        onMoveSuccess={handleSessionMove}
+        tables={tables}
+        onSessionMoved={handleSessionMove}
       />
     </div>
   );
 };
 
-export default TablesManagement; 
+// Main export with ToastProvider wrapper
+const TablesManagement = () => {
+  return (
+    <ToastProvider>
+      <TablesManagementContent />
+    </ToastProvider>
+  );
+};
+
+export default TablesManagement;

@@ -2,7 +2,7 @@ import React from 'react'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://chalkboard.id'),
+  metadataBase: new URL('https://b3billing.id'),
   other: {
     'sitemaps': '/sitemap.xml',
   }

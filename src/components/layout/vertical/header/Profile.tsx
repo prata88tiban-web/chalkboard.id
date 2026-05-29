@@ -71,7 +71,7 @@ const Profile = () => {
             />
             <div>
               <h5 className="text-15 font-semibold">
-                {session?.user?.name || "ChalkBoard User"}
+                {session?.user?.name || "B3-Billing User"}
                 {session?.user?.role === 'admin' && (
                   <span className="text-success ml-2">Admin</span>
                 )}
@@ -80,7 +80,7 @@ const Profile = () => {
                 )}
               </h5>
               <p className="text-sm text-ld opacity-80">
-                {session?.user?.email || "user@chalkboard.com"}
+                {session?.user?.email || "user@b3billing.com"}
               </p>
             </div>
           </div>

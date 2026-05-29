@@ -112,7 +112,7 @@ const basicTableData2: TableType3[] = [
   {
     avatar: '/images/profile/user-9.jpg',
     name: 'Isabel Vasquez',
-    post: 'Modernize admin',
+    post: 'B3-Billing Billiard Batam',
     status: 'pending',
     statuscolor: 'primary',
     users: [

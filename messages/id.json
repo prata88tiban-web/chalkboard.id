@@ -71,7 +71,7 @@
     "hourly": "Per-jam"
   },
   "Dashboard": {
-    "title": "Dasbor ChalkBoard",
+    "title": "Dasbor B3-Billing Billiard Batam",
     "subtitle": "Selamat datang kembali, {name}",
     "loading": "Memuat dasbor...",
     "redirecting": "Mengalihkan ke halaman masuk...",
@@ -507,7 +507,7 @@
       "printInEnglish": "Cetak dalam Bahasa Inggris",
       "printInIndonesian": "Cetak dalam Bahasa Indonesia",
       "receipt": {
-        "title": "BILLIARD CHALKBOARD",
+        "title": "B3-BILLING BILLIARD BATAM",
         "subtitle": "Struk Pembayaran",
         "transaction": "Transaksi",
         "date": "Tanggal",
@@ -527,7 +527,7 @@
         "total": "TOTAL",
         "footer": {
           "thankYou": "Terima kasih atas kunjungan Anda!",
-          "businessName": "Billiard Hall ChalkBoard",
+          "businessName": "B3-Billing Billiard Batam",
           "generated": "Dicetak"
         }
       }
@@ -972,7 +972,7 @@
       "title": "Informasi Toko",
       "subtitle": "Konfigurasi detail billiard hall untuk struk",
       "storeName": "Nama Toko",
-      "storeNamePlaceholder": "contoh: Chalkboard Billiard",
+      "storeNamePlaceholder": "contoh: B3-Billing Billiard Batam",
       "storeAddress": "Alamat",
       "storeAddressPlaceholder": "contoh: Jl. Sudirman No. 123",
       "storePhone": "Nomor Telepon",

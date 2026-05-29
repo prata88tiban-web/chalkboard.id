@@ -99,12 +99,12 @@ export async function seedDatabase() {
 
     // Create users with different roles
     const sampleUsers = [
-      { name: 'Admin User', email: 'admin@chalkboard.com', role: 'admin', password: 'hashed_password_1' },
-      { name: 'Manager Ahmad', email: 'ahmad@chalkboard.com', role: 'manager', password: 'hashed_password_2' },
-      { name: 'Staff Sarah', email: 'sarah@chalkboard.com', role: 'staff', password: 'hashed_password_3' },
-      { name: 'Staff Budi', email: 'budi@chalkboard.com', role: 'staff', password: 'hashed_password_4' },
-      { name: 'Staff Diana', email: 'diana@chalkboard.com', role: 'staff', password: 'hashed_password_5' },
-      { name: 'Staff Eko', email: 'eko@chalkboard.com', role: 'staff', password: 'hashed_password_6' },
+      { name: 'Admin User', email: 'admin@b3billing.com', role: 'admin', password: 'hashed_password_1' },
+      { name: 'Manager Ahmad', email: 'ahmad@b3billing.com', role: 'manager', password: 'hashed_password_2' },
+      { name: 'Staff Sarah', email: 'sarah@b3billing.com', role: 'staff', password: 'hashed_password_3' },
+      { name: 'Staff Budi', email: 'budi@b3billing.com', role: 'staff', password: 'hashed_password_4' },
+      { name: 'Staff Diana', email: 'diana@b3billing.com', role: 'staff', password: 'hashed_password_5' },
+      { name: 'Staff Eko', email: 'eko@b3billing.com', role: 'staff', password: 'hashed_password_6' },
     ];
 
     console.log('👤 Creating users...');

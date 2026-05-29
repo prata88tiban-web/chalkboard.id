@@ -346,7 +346,7 @@ const TransactionsPage = () => {
       (locale === 'id' ? 'Pajak' : 'Tax');
     
     // Create a temporary translations object for the selected locale
-    const storeName = storeSettings.store_name || (locale === 'id' ? 'BILLIARD CHALKBOARD' : 'CHALKBOARD BILLIARD');
+    const storeName = storeSettings.store_name || 'B3-BILLING BILLIARD BATAM';
     const receiptTranslations = locale === 'id' ? {
       title: storeName.toUpperCase(),
       subtitle: 'Struk Pembayaran',
@@ -368,7 +368,7 @@ const TransactionsPage = () => {
       total: 'TOTAL',
       walkInCustomer: 'Pelanggan Walk-in',
       thankYou: 'Terima kasih atas kunjungan Anda!',
-      businessName: storeSettings.store_name || 'Billiard Hall ChalkBoard',
+      businessName: storeSettings.store_name || 'B3-Billing Billiard Batam',
       generated: 'Dicetak',
       pending: 'TERTUNDA',
       success: 'BERHASIL',
@@ -395,7 +395,7 @@ const TransactionsPage = () => {
       total: 'TOTAL',
       walkInCustomer: 'Walk-in Customer',
       thankYou: 'Thank you for visiting!',
-      businessName: storeSettings.store_name || 'ChalkBoard Billiard Hall',
+      businessName: storeSettings.store_name || 'B3-Billing Billiard Batam',
       generated: 'Generated',
       pending: 'PENDING',
       success: 'SUCCESS',

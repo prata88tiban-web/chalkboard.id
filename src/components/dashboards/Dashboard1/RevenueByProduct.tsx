@@ -43,7 +43,7 @@ const RevenueByProduct = () => {
     },
     {
       img: product3,
-      project: "Modernize Dashboard",
+      project: "B3-Billing Billiard Batam",
       name: "Anil Kumar",
       progrsss: "73.2%",
       statuscolor: "lightsuccess",
@@ -76,7 +76,7 @@ const RevenueByProduct = () => {
     },
     {
       img: product3,
-      project: "Modernize Dashboard",
+      project: "B3-Billing Billiard Batam",
       name: "Anil Kumar",
       progrsss: "73.2%",
       statuscolor: "lightsuccess",
