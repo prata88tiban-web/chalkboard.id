@@ -8,6 +8,7 @@ export const tables = pgTable('tables', {
   hourlyRate: decimal('hourly_rate', { precision: 10, scale: 2 }).notNull(),
   perMinuteRate: decimal('per_minute_rate', { precision: 10, scale: 4 }), // Rate per minute (optional)
   pricingPackageId: uuid('pricing_package_id').references(() => pricingPackages.id), // New field for package reference
+  arduinoRelay: integer('arduino_relay'), // Mapping to Arduino relay pin/ID
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),

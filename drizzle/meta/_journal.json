@@ -8,6 +8,13 @@
       "when": 1767781965863,
       "tag": "0000_wakeful_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780056370761,
+      "tag": "0001_soft_ultron",
+      "breakpoints": true
     }
   ]
 }

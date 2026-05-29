@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from 'next-intl';
 import { Alert, Card, Button, Label, TextInput, Checkbox, Select, Textarea } from "flowbite-react";
-import { IconSettings, IconCheck, IconX, IconPercentage, IconBuilding, IconUser } from "@tabler/icons-react";
+import { IconSettings, IconCheck, IconX, IconPercentage, IconBuilding, IconUser, IconPrinter, IconCpu, IconBulb } from "@tabler/icons-react";
 import DefaultSpinner from "@/components/ui-components/Spinner/DefaultSpinner";
 
 export default function AdminPage() {
@@ -29,6 +29,11 @@ export default function AdminPage() {
   });
   const [storeLoading, setStoreLoading] = useState(false);
   const [staffList, setStaffList] = useState<{ id: number; name: string; role: string }[]>([]);
+  const [tablesList, setTablesList] = useState<any[]>([]);
+  const [printersList, setPrintersList] = useState<any[]>([]);
+  const [newPrinter, setNewPrinter] = useState({ name: '', type: 'usb', address: '', location: 'cashier' });
+  const [arduinoSettings, setArduinoSettings] = useState({ port: '', baud: '9600', command: 'RELAY_{id}_{STATE}' });
+  const [serialPorts, setSerialPorts] = useState<string[]>([]);
   const [defaultStaffId, setDefaultStaffId] = useState('');
   const [staffLoading, setStaffLoading] = useState(false);
 
@@ -41,7 +46,46 @@ export default function AdminPage() {
     fetchTaxSettings();
     fetchStoreSettings();
     fetchStaffData();
+    fetchTablesData();
+    fetchPrintersData();
+    fetchSerialPorts();
   }, [session, status, router]);
+
+  const fetchTablesData = async () => {
+    try {
+      const response = await fetch('/api/tables');
+      if (response.ok) {
+        const data = await response.json();
+        setTablesList(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tables:', error);
+    }
+  };
+
+  const fetchPrintersData = async () => {
+    try {
+      const response = await fetch('/api/admin/printers');
+      if (response.ok) {
+        const data = await response.json();
+        setPrintersList(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch printers:', error);
+    }
+  };
+
+  const fetchSerialPorts = async () => {
+    if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const ports = await invoke('list_serial_ports') as string[];
+        setSerialPorts(ports);
+      } catch (error) {
+        console.error('Failed to fetch serial ports:', error);
+      }
+    }
+  };
 
   const fetchTaxSettings = async () => {
     try {
@@ -68,6 +112,11 @@ export default function AdminPage() {
           store_notes: s.store_notes || ''
         });
         setDefaultStaffId(s.default_staff_id || '');
+        setArduinoSettings({
+          port: s.arduino_port || '',
+          baud: s.arduino_baud || '9600',
+          command: s.arduino_command || 'RELAY_{id}_{STATE}'
+        });
       }
     } catch (error) {
       console.error('Failed to fetch store settings:', error);
@@ -123,6 +172,73 @@ export default function AdminPage() {
     }
   };
 
+  const handleAddPrinter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch('/api/admin/printers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPrinter),
+      });
+      if (response.ok) {
+        setAlert({ type: 'success', message: 'Printer added successfully' });
+        setNewPrinter({ name: '', type: 'usb', address: '', location: 'cashier' });
+        fetchPrintersData();
+      }
+    } catch (error) {
+      setAlert({ type: 'error', message: 'Failed to add printer' });
+    }
+  };
+
+  const handleDeletePrinter = async (id: number) => {
+    try {
+      const response = await fetch(`/api/admin/printers?id=${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setAlert({ type: 'success', message: 'Printer deleted successfully' });
+        fetchPrintersData();
+      }
+    } catch (error) {
+      setAlert({ type: 'error', message: 'Failed to delete printer' });
+    }
+  };
+
+  const handleArduinoSettingsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'arduino_port', value: arduinoSettings.port, description: 'Arduino Serial Port' }),
+      });
+      await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'arduino_baud', value: arduinoSettings.baud, description: 'Arduino Baud Rate' }),
+      });
+      await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'arduino_command', value: arduinoSettings.command, description: 'Arduino Command Template' }),
+      });
+      setAlert({ type: 'success', message: 'Arduino settings saved' });
+    } catch (error) {
+      setAlert({ type: 'error', message: 'Failed to save Arduino settings' });
+    }
+  };
+
+  const handleTableRelayUpdate = async (tableId: number, relayId: string) => {
+    try {
+      await fetch(`/api/tables/${tableId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ arduinoRelay: relayId === '' ? null : parseInt(relayId) }),
+      });
+      fetchTablesData();
+    } catch (error) {
+      setAlert({ type: 'error', message: 'Failed to update table relay' });
+    }
+  };
+
   const handleTaxSettingsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -158,6 +274,8 @@ export default function AdminPage() {
   }
 
   if (!session) return null;
+
+  const th = useTranslations('AdminPage.hardware');
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -368,6 +486,122 @@ export default function AdminPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </Card>
+
+        {/* Printer Management Card */}
+        <Card>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-xl font-semibold text-dark dark:text-white mb-2 flex items-center gap-2">
+                <IconPrinter className="h-5 w-5" />
+                {th('printerTitle')}
+              </h3>
+              <p className="text-bodytext text-sm mb-4">
+                {th('printerSubtitle')}
+              </p>
+            </div>
+
+            <form onSubmit={handleAddPrinter} className="space-y-4 border-b pb-4 mb-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="printerName">{th('printerName')}</Label>
+                  <TextInput id="printerName" value={newPrinter.name} onChange={(e) => setNewPrinter({...newPrinter, name: e.target.value})} placeholder="e.g. Epson TM-T88" required />
+                </div>
+                <div>
+                  <Label htmlFor="printerType">{th('printerType')}</Label>
+                  <Select id="printerType" value={newPrinter.type} onChange={(e) => setNewPrinter({...newPrinter, type: e.target.value})} required>
+                    <option value="usb">{th('usbLocal')}</option>
+                    <option value="ip">{th('networkIp')}</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="printerAddress">{th('addressIp')}</Label>
+                  <TextInput id="printerAddress" value={newPrinter.address} onChange={(e) => setNewPrinter({...newPrinter, address: e.target.value})} placeholder="e.g. 192.168.1.100 or POS-80" required />
+                </div>
+                <div>
+                  <Label htmlFor="printerLoc">{th('location')}</Label>
+                  <Select id="printerLoc" value={newPrinter.location} onChange={(e) => setNewPrinter({...newPrinter, location: e.target.value})} required>
+                    <option value="cashier">{th('cashier')}</option>
+                    <option value="kitchen">{th('kitchen')}</option>
+                    <option value="bar">{th('bar')}</option>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit" size="sm">{th('addPrinter')}</Button>
+              </div>
+            </form>
+
+            <div className="space-y-2">
+              {printersList.map((p) => (
+                <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div>
+                    <p className="font-medium">{p.name} ({th(p.location)})</p>
+                    <p className="text-xs text-bodytext">{p.type === 'usb' ? th('usbLocal') : th('networkIp')} - {p.address}</p>
+                  </div>
+                  <Button color="failure" size="xs" onClick={() => handleDeletePrinter(p.id)}><IconX size={14} /></Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+
+        {/* Arduino Configuration Card */}
+        <Card>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-xl font-semibold text-dark dark:text-white mb-2 flex items-center gap-2">
+                <IconCpu className="h-5 w-5" />
+                {th('arduinoTitle')}
+              </h3>
+              <p className="text-bodytext text-sm mb-4">
+                {th('arduinoSubtitle')}
+              </p>
+            </div>
+
+            <form onSubmit={handleArduinoSettingsSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="arduinoPort">{th('serialPort')}</Label>
+                <Select id="arduinoPort" value={arduinoSettings.port} onChange={(e) => setArduinoSettings({...arduinoSettings, port: e.target.value})}>
+                  <option value="">{th('serialPort')}</option>
+                  {serialPorts.map(p => <option key={p} value={p}>{p}</option>)}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="arduinoBaud">{th('baudRate')}</Label>
+                <Select id="arduinoBaud" value={arduinoSettings.baud} onChange={(e) => setArduinoSettings({...arduinoSettings, baud: e.target.value})}>
+                  <option value="9600">9600</option>
+                  <option value="115200">115200</option>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="arduinoCommand">{th('arduinoCommand')}</Label>
+                <TextInput id="arduinoCommand" value={arduinoSettings.command} onChange={(e) => setArduinoSettings({...arduinoSettings, command: e.target.value})} placeholder={th('arduinoCommandPlaceholder')} />
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit">{th('saveArduino')}</Button>
+              </div>
+            </form>
+
+            <div className="pt-4 border-t">
+              <h4 className="font-medium mb-3 flex items-center gap-2"><IconBulb size={18} /> {th('tableRelayMapping')}</h4>
+              <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                {tablesList.map((table) => (
+                  <div key={table.id} className="flex items-center justify-between gap-4">
+                    <span className="text-sm font-medium">{table.name}</span>
+                    <TextInput
+                      type="number"
+                      size="sm"
+                      className="w-24"
+                      placeholder={th('relayId')}
+                      value={table.arduinoRelay ?? ''}
+                      onChange={(e) => handleTableRelayUpdate(table.id, e.target.value)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </Card>
 

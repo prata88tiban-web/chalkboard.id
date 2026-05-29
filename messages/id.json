@@ -1000,6 +1000,31 @@
       "hours": "Jam",
       "minutes": "Menit",
       "seconds": "Detik"
+    },
+    "hardware": {
+      "printerTitle": "Manajemen Printer",
+      "printerSubtitle": "Konfigurasikan printer untuk lokasi yang berbeda.",
+      "addPrinter": "Tambah Printer",
+      "printerName": "Nama Printer",
+      "printerType": "Jenis Koneksi",
+      "addressIp": "Alamat / IP",
+      "location": "Lokasi",
+      "usbLocal": "USB / Lokal",
+      "networkIp": "Jaringan (IP)",
+      "cashier": "Kasir",
+      "kitchen": "Dapur",
+      "bar": "Bar",
+      "arduinoTitle": "Pengontrol Lampu Arduino",
+      "arduinoSubtitle": "Atur koneksi Arduino untuk lampu meja.",
+      "serialPort": "Port Serial",
+      "baudRate": "Baud Rate",
+      "saveArduino": "Simpan Pengaturan Arduino",
+      "tableRelayMapping": "Pemetaan Relay Meja",
+      "relayId": "ID Relay",
+      "arduinoCommand": "Perintah Arduino (ON/OFF)",
+      "arduinoCommandPlaceholder": "contoh: RELAY_{id}_{STATE}",
+      "testPrinter": "Tes Printer",
+      "testArduino": "Tes Arduino"
     }
   },
   "PricingPackages": {

@@ -109,7 +109,7 @@
     "date-fns": "2.30.0",
     "devextreme": "22.2.6",
     "devextreme-react": "22.2.6",
-    "drizzle-kit": "^0.31.4",
+    "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.1",
     "embla-carousel-react": "^8.5.2",
     "flowbite": "2.3.0",

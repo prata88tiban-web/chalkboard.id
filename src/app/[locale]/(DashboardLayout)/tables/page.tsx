@@ -62,6 +62,7 @@ interface BilliardTable {
   hourlyRate: string;
   perMinuteRate?: string;
   pricingPackageId?: string;
+  arduinoRelay?: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -259,6 +260,7 @@ const TablesManagementContent = () => {
   const autoEndTriggeredRef = useRef<Set<number>>(new Set());
   const defaultStaffIdRef = useRef<string>('');
   const [pricingPackages, setPricingPackages] = useState<PricingPackage[]>([]);
+  const [arduinoConfig, setArduinoConfig] = useState({ port: '', baud: '9600', command: 'RELAY_{id}_{STATE}' });
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
   const [tableToStop, setTableToStop] = useState<BilliardTable | null>(null);
 
@@ -410,12 +412,29 @@ const TablesManagementContent = () => {
     }
   };
 
+  const fetchArduinoConfig = async () => {
+    try {
+      const response = await fetch('/api/admin/settings');
+      if (response.ok) {
+        const data = await response.json();
+        setArduinoConfig({
+          port: data.settings?.arduino_port || '',
+          baud: data.settings?.arduino_baud || '9600',
+          command: data.settings?.arduino_command || 'RELAY_{id}_{STATE}'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch Arduino config:', error);
+    }
+  };
+
   useEffect(() => {
     if (session) {
       fetchTables();
       fetchTaxSettings();
       fetchPricingPackages();
       fetchDefaultStaff();
+      fetchArduinoConfig();
     }
   }, [session, fetchTables]);
 
@@ -749,6 +768,27 @@ const TablesManagementContent = () => {
     }
   };
 
+  const triggerArduinoLight = async (relayId: number | null, state: 'ON' | 'OFF') => {
+    if (!relayId || !arduinoConfig.port) return;
+
+    if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const command = arduinoConfig.command
+          .replace('{id}', relayId.toString())
+          .replace('{STATE}', state);
+
+        await invoke('send_arduino_command', {
+          portName: arduinoConfig.port,
+          baudRate: parseInt(arduinoConfig.baud),
+          command: command
+        });
+      } catch (error) {
+        console.error('Failed to trigger Arduino light:', error);
+      }
+    }
+  };
+
   const handleStartSession = async () => {
     if (!selectedTable) return;
     
@@ -765,6 +805,11 @@ const TablesManagementContent = () => {
       });
 
       if (response.ok) {
+        // Trigger Light ON
+        if ((selectedTable as any).arduinoRelay) {
+          triggerArduinoLight((selectedTable as any).arduinoRelay, 'ON');
+        }
+
         showAlert('success', tAlerts('sessionStartedSuccess'));
         setShowSessionModal(false);
         setSelectedTable(null);
@@ -786,6 +831,12 @@ const TablesManagementContent = () => {
       });
 
       if (response.ok) {
+        // Trigger Light OFF
+        const table = tables.find(t => t.id === tableId);
+        if (table && (table as any).arduinoRelay) {
+          triggerArduinoLight((table as any).arduinoRelay, 'OFF');
+        }
+
         const data = await response.json();
         setBillingData(data);
         setShowBillingModal(true);
