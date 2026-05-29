@@ -1,14 +1,16 @@
 'use client';
 
 import React from 'react';
+import { motion } from 'framer-motion';
 
-export type StatusType = 'available' | 'occupied' | 'maintenance' | 'reserved' | 'pending' | 'completed' | 'cancelled';
+export type StatusType = 'available' | 'occupied' | 'maintenance' | 'reserved' | 'pending' | 'completed' | 'cancelled' | 'active' | 'inactive';
 
 interface StatusBadgeProps {
   status: StatusType | string;
   size?: 'xs' | 'sm' | 'md' | 'lg';
   pulse?: boolean;
   className?: string;
+  showDot?: boolean;
 }
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string; label: string }> = {
@@ -54,20 +56,32 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string; labe
     dot: 'bg-gray-500',
     label: 'Cancelled',
   },
+  active: {
+    bg: 'bg-green-100 dark:bg-green-900/30',
+    text: 'text-green-700 dark:text-green-300',
+    dot: 'bg-green-500',
+    label: 'Active',
+  },
+  inactive: {
+    bg: 'bg-red-100 dark:bg-red-900/30',
+    text: 'text-red-700 dark:text-red-300',
+    dot: 'bg-red-500',
+    label: 'Inactive',
+  },
 };
 
 const sizeConfig = {
-  xs: 'px-2 py-0.5 text-xs',
+  xs: 'px-2 py-0.5 text-[10px]',
   sm: 'px-2.5 py-1 text-xs',
   md: 'px-3 py-1.5 text-sm',
   lg: 'px-4 py-2 text-sm',
 };
 
 const dotSizeConfig = {
-  xs: 'w-1.5 h-1.5',
-  sm: 'w-2 h-2',
-  md: 'w-2.5 h-2.5',
-  lg: 'w-3 h-3',
+  xs: 'w-1 h-1',
+  sm: 'w-1.5 h-1.5',
+  md: 'w-2 h-2',
+  lg: 'w-2.5 h-2.5',
 };
 
 const StatusBadge: React.FC<StatusBadgeProps> = ({
@@ -75,8 +89,10 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({
   size = 'sm',
   pulse = false,
   className = '',
+  showDot = true,
 }) => {
-  const config = statusConfig[status] || {
+  const normalizedStatus = status.toLowerCase();
+  const config = statusConfig[normalizedStatus] || {
     bg: 'bg-gray-100 dark:bg-gray-800',
     text: 'text-gray-700 dark:text-gray-300',
     dot: 'bg-gray-500',
@@ -84,22 +100,27 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({
   };
 
   return (
-    <span
+    <motion.span
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
       className={`
-        inline-flex items-center gap-1.5 rounded-full font-medium
+        inline-flex items-center gap-1.5 rounded-full font-bold uppercase tracking-wider
+        shadow-sm transition-all duration-300
         ${config.bg} ${config.text} ${sizeConfig[size]} ${className}
       `}
     >
-      <span className={`relative flex ${dotSizeConfig[size]}`}>
-        <span className={`rounded-full ${config.dot} w-full h-full`} />
-        {pulse && (
-          <span
-            className={`absolute inline-flex h-full w-full rounded-full ${config.dot} opacity-75 animate-ping`}
-          />
-        )}
-      </span>
+      {showDot && (
+        <span className={`relative flex ${dotSizeConfig[size]}`}>
+          <span className={`rounded-full ${config.dot} w-full h-full`} />
+          {pulse && (
+            <span
+              className={`absolute inline-flex h-full w-full rounded-full ${config.dot} opacity-75 animate-ping`}
+            />
+          )}
+        </span>
+      )}
       {config.label}
-    </span>
+    </motion.span>
   );
 };
 

@@ -1,122 +1,74 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface TooltipProps {
-  content: React.ReactNode;
+  content: string;
   children: React.ReactNode;
   position?: 'top' | 'bottom' | 'left' | 'right';
-  delay?: number;
+  className?: string;
 }
+
+const positionStyles = {
+  top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
+  bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
+  left: 'right-full top-1/2 -translate-y-1/2 mr-2',
+  right: 'left-full top-1/2 -translate-y-1/2 ml-2',
+};
+
+const arrowStyles = {
+  top: 'top-full left-1/2 -translate-x-1/2 -mt-1 border-t-gray-900 dark:border-t-white',
+  bottom: 'bottom-full left-1/2 -translate-x-1/2 -mb-1 border-b-gray-900 dark:border-b-white',
+  left: 'left-full top-1/2 -translate-y-1/2 -ml-1 border-l-gray-900 dark:border-l-white',
+  right: 'right-full top-1/2 -translate-y-1/2 -mr-1 border-r-gray-900 dark:border-r-white',
+};
 
 const Tooltip: React.FC<TooltipProps> = ({
   content,
   children,
   position = 'top',
-  delay = 200,
+  className = '',
 }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [coords, setCoords] = useState({ x: 0, y: 0 });
-  const triggerRef = useRef<HTMLDivElement>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout>();
-
-  const calculatePosition = () => {
-    if (!triggerRef.current || !tooltipRef.current) return;
-
-    const triggerRect = triggerRef.current.getBoundingClientRect();
-    const tooltipRect = tooltipRef.current.getBoundingClientRect();
-    const offset = 8;
-
-    let x = 0;
-    let y = 0;
-
-    switch (position) {
-      case 'top':
-        x = triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2;
-        y = triggerRect.top - tooltipRect.height - offset;
-        break;
-      case 'bottom':
-        x = triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2;
-        y = triggerRect.bottom + offset;
-        break;
-      case 'left':
-        x = triggerRect.left - tooltipRect.width - offset;
-        y = triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2;
-        break;
-      case 'right':
-        x = triggerRect.right + offset;
-        y = triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2;
-        break;
-    }
-
-    // Keep tooltip within viewport
-    x = Math.max(8, Math.min(x, window.innerWidth - tooltipRect.width - 8));
-    y = Math.max(8, Math.min(y, window.innerHeight - tooltipRect.height - 8));
-
-    setCoords({ x, y });
-  };
-
-  const handleMouseEnter = () => {
-    timeoutRef.current = setTimeout(() => {
-      setIsVisible(true);
-    }, delay);
-  };
-
-  const handleMouseLeave = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    setIsVisible(false);
-  };
-
-  useEffect(() => {
-    if (isVisible) {
-      calculatePosition();
-    }
-  }, [isVisible]);
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
 
   return (
-    <>
-      <div
-        ref={triggerRef}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        className="inline-flex"
-      >
-        {children}
-      </div>
-      {isVisible && (
-        <div
-          ref={tooltipRef}
-          className="fixed z-50 px-3 py-2 text-xs font-medium text-white bg-gray-900 dark:bg-gray-700 rounded-lg shadow-lg pointer-events-none transform transition-opacity duration-200"
-          style={{
-            left: coords.x,
-            top: coords.y,
-            opacity: isVisible ? 1 : 0,
-          }}
-          role="tooltip"
-        >
-          {content}
-          <div
-            className={`absolute w-2 h-2 bg-gray-900 dark:bg-gray-700 transform rotate-45 ${
-              position === 'top' ? 'bottom-[-4px] left-1/2 -translate-x-1/2' :
-              position === 'bottom' ? 'top-[-4px] left-1/2 -translate-x-1/2' :
-              position === 'left' ? 'right-[-4px] top-1/2 -translate-y-1/2' :
-              'left-[-4px] top-1/2 -translate-y-1/2'
-            }`}
-          />
-        </div>
-      )}
-    </>
+    <div
+      className={`relative inline-block ${className}`}
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+      onFocus={() => setIsVisible(true)}
+      onBlur={() => setIsVisible(false)}
+    >
+      {children}
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, [position]: position === 'top' || position === 'left' ? 10 : -10 }}
+            animate={{ opacity: 1, scale: 1, [position]: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className={`
+              absolute z-[100] whitespace-nowrap pointer-events-none
+              ${positionStyles[position]}
+            `}
+          >
+            <div className="
+              px-3 py-1.5 rounded-lg
+              bg-gray-900 dark:bg-white
+              text-white dark:text-gray-900
+              text-[11px] font-black uppercase tracking-widest
+              shadow-xl
+            ">
+              {content}
+              <div className={`
+                absolute w-2 h-2 border-4 border-transparent
+                ${arrowStyles[position]}
+              `} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 

@@ -1,44 +1,53 @@
 'use client';
 
 import React from 'react';
-import { IconQuestionMark, IconInfoCircle, IconBulb } from '@tabler/icons-react';
-
-type HintType = 'info' | 'tip' | 'help';
+import { motion, AnimatePresence } from 'framer-motion';
+import { IconInfoCircle, IconAlertCircle, IconCheck, IconBulb, IconX } from '@tabler/icons-react';
 
 interface HintProps {
-  type?: HintType;
-  title?: string;
   children: React.ReactNode;
+  type?: 'info' | 'warning' | 'success' | 'tip';
+  title?: string;
   dismissible?: boolean;
   onDismiss?: () => void;
   className?: string;
 }
 
-const hintConfig: Record<HintType, { bg: string; border: string; icon: React.ReactNode; iconBg: string }> = {
+const hintConfig = {
   info: {
-    bg: 'bg-sky-50 dark:bg-sky-900/20',
-    border: 'border-sky-200 dark:border-sky-800',
-    iconBg: 'bg-sky-100 dark:bg-sky-800',
-    icon: <IconInfoCircle className="w-4 h-4 text-sky-600 dark:text-sky-400" />,
+    bg: 'bg-blue-50 dark:bg-blue-900/20',
+    border: 'border-blue-200 dark:border-blue-800/50',
+    text: 'text-blue-800 dark:text-blue-300',
+    icon: <IconInfoCircle className="w-5 h-5" />,
+    accent: 'bg-blue-500',
+  },
+  warning: {
+    bg: 'bg-amber-50 dark:bg-amber-900/20',
+    border: 'border-amber-200 dark:border-amber-800/50',
+    text: 'text-amber-800 dark:text-amber-300',
+    icon: <IconAlertCircle className="w-5 h-5" />,
+    accent: 'bg-amber-500',
+  },
+  success: {
+    bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+    border: 'border-emerald-200 dark:border-emerald-800/50',
+    text: 'text-emerald-800 dark:text-emerald-300',
+    icon: <IconCheck className="w-5 h-5" />,
+    accent: 'bg-emerald-500',
   },
   tip: {
-    bg: 'bg-amber-50 dark:bg-amber-900/20',
-    border: 'border-amber-200 dark:border-amber-800',
-    iconBg: 'bg-amber-100 dark:bg-amber-800',
-    icon: <IconBulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />,
-  },
-  help: {
     bg: 'bg-violet-50 dark:bg-violet-900/20',
-    border: 'border-violet-200 dark:border-violet-800',
-    iconBg: 'bg-violet-100 dark:bg-violet-800',
-    icon: <IconQuestionMark className="w-4 h-4 text-violet-600 dark:text-violet-400" />,
+    border: 'border-violet-200 dark:border-violet-800/50',
+    text: 'text-violet-800 dark:text-violet-300',
+    icon: <IconBulb className="w-5 h-5" />,
+    accent: 'bg-violet-500',
   },
 };
 
 const Hint: React.FC<HintProps> = ({
+  children,
   type = 'info',
   title,
-  children,
   dismissible = false,
   onDismiss,
   className = '',
@@ -46,33 +55,43 @@ const Hint: React.FC<HintProps> = ({
   const config = hintConfig[type];
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
       className={`
-        flex items-start gap-3 p-4 rounded-xl border
+        relative overflow-hidden p-4 rounded-2xl border-2
         ${config.bg} ${config.border} ${className}
+        shadow-sm flex gap-4
       `}
-      role="note"
     >
-      <div className={`flex-shrink-0 w-8 h-8 rounded-lg ${config.iconBg} flex items-center justify-center`}>
+      {/* Accent Strip */}
+      <div className={`absolute top-0 left-0 bottom-0 w-1 ${config.accent}`} />
+
+      <div className={`flex-shrink-0 mt-0.5 ${config.text}`}>
         {config.icon}
       </div>
+
       <div className="flex-1 min-w-0">
         {title && (
-          <p className="font-semibold text-dark dark:text-white text-sm mb-1">{title}</p>
+          <h4 className={`text-sm font-black uppercase tracking-widest mb-1 ${config.text}`}>
+            {title}
+          </h4>
         )}
-        <div className="text-sm text-bodytext">{children}</div>
+        <div className={`text-sm font-medium leading-relaxed ${config.text} opacity-90`}>
+          {children}
+        </div>
       </div>
+
       {dismissible && (
         <button
           onClick={onDismiss}
-          className="flex-shrink-0 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          className={`flex-shrink-0 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${config.text}`}
         >
-          <svg className="w-4 h-4 text-bodytext" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <IconX className="w-4 h-4" />
         </button>
       )}
-    </div>
+    </motion.div>
   );
 };
 
