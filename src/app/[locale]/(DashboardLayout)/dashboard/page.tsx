@@ -17,6 +17,9 @@ import {
   IconCreditCard
 } from "@tabler/icons-react";
 import DefaultSpinner from "@/components/ui-components/Spinner/DefaultSpinner";
+import ShiftManager from "@/components/operational/ShiftManager";
+import QueueManager from "@/components/operational/QueueManager";
+import ReservationPanel from "@/components/operational/ReservationPanel";
 
 interface Table {
   id: number;
@@ -60,6 +63,19 @@ const B3BillingDashboard = () => {
     sessions: { totalRevenue: 0 },
     fnb: { totalRevenue: 0 }
   });
+  const [lowStockItems, setLowStockItems] = useState<any[]>([]);
+
+  const fetchLowStock = async () => {
+    try {
+      const res = await fetch('/api/fnb/items');
+      if (res.ok) {
+        const items = await res.json();
+        setLowStockItems(items.filter((i: any) => i.stockQuantity <= i.minStockLevel));
+      }
+    } catch (error) {
+      console.error('Failed to fetch stock alert');
+    }
+  };
 
   // Form state for session modal
   const [sessionData, setSessionData] = useState({
@@ -141,6 +157,7 @@ const B3BillingDashboard = () => {
     if (session) {
       fetchTables();
       fetchDailyStats();
+      fetchLowStock();
     }
   }, [session]);
 
@@ -319,10 +336,19 @@ const B3BillingDashboard = () => {
 
   return (
     <div className="space-y-6">
+      <ShiftManager />
+
       {/* Alert */}
       {alert && (
         <Alert color={alert.type} className="mb-4">
           {alert.message}
+        </Alert>
+      )}
+
+      {/* Live Alerts */}
+      {lowStockItems.length > 0 && (
+        <Alert color="warning" icon={IconCoffee}>
+          <span><strong>Low Stock Alert:</strong> {lowStockItems.map(i => i.name).join(', ')} need restock soon.</span>
         </Alert>
       )}
 
@@ -349,6 +375,16 @@ const B3BillingDashboard = () => {
               {t('buttons.addTable')}
             </Button>
           </Link>
+        </div>
+      </div>
+
+      {/* Quick Ops Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <ReservationPanel />
+        </div>
+        <div>
+          <QueueManager />
         </div>
       </div>
 

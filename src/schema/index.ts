@@ -3,4 +3,7 @@ export * from './fnb';
 export * from './auth';
 export * from './payments';
 export * from './settings';
-export * from './pricing-packages'; 
+export * from './pricing-packages';
+export * from './shifts';
+export * from './reservations';
+export * from './queues';
