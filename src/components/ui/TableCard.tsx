@@ -24,6 +24,8 @@ import {
   IconAlertTriangle,
   IconStar,
   IconTrophy,
+  IconPause,
+  IconWashGentle,
 } from '@tabler/icons-react';
 import StatusBadge from './StatusBadge';
 import Tooltip from './Tooltip';
@@ -50,6 +52,7 @@ export interface BilliardTable {
   id: number;
   name: string;
   status: 'available' | 'occupied' | 'maintenance' | 'reserved' | 'cleaning' | 'waiting' | 'overtime' | 'vip' | 'tournament';
+  status: 'available' | 'occupied' | 'maintenance' | 'reserved' | 'cleaning' | 'overtime' | 'paused' | 'tournament' | 'payment_pending';
   pricingPackage?: PricingPackage;
 }
 
@@ -66,6 +69,7 @@ export interface TableCardProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onPin?: () => void;
+  onStatusChange?: (status: BilliardTable['status']) => void;
   formatCurrency: (amount: number | string) => string;
   translations: {
     startTime: string;
@@ -128,6 +132,11 @@ const cardColors: Record<string, { gradient: string; border: string; shadow: str
     shadow: 'shadow-indigo-500/5 hover:shadow-indigo-500/20',
     accent: 'bg-indigo-500',
     text: 'text-indigo-700 dark:text-indigo-300',
+    gradient: 'from-cyan-50 via-white to-cyan-50/30 dark:from-cyan-950/20 dark:via-gray-900 dark:to-cyan-950/10',
+    border: 'border-cyan-200 dark:border-cyan-800/50',
+    shadow: 'shadow-cyan-500/5 hover:shadow-cyan-500/20',
+    accent: 'bg-cyan-500',
+    text: 'text-cyan-700 dark:text-cyan-300',
   },
   overtime: {
     gradient: 'from-orange-50 via-white to-orange-50/30 dark:from-orange-950/20 dark:via-gray-900 dark:to-orange-950/10',
@@ -137,6 +146,21 @@ const cardColors: Record<string, { gradient: string; border: string; shadow: str
     text: 'text-orange-700 dark:text-orange-300',
   },
   vip: {
+  paused: {
+    gradient: 'from-slate-50 via-white to-slate-50/30 dark:from-slate-950/20 dark:via-gray-900 dark:to-slate-950/10',
+    border: 'border-slate-200 dark:border-slate-800/50',
+    shadow: 'shadow-slate-500/5 hover:shadow-slate-500/20',
+    accent: 'bg-slate-500',
+    text: 'text-slate-700 dark:text-slate-300',
+  },
+  tournament: {
+    gradient: 'from-indigo-50 via-white to-indigo-50/30 dark:from-indigo-950/20 dark:via-gray-900 dark:to-indigo-950/10',
+    border: 'border-indigo-200 dark:border-indigo-800/50',
+    shadow: 'shadow-indigo-500/5 hover:shadow-indigo-500/20',
+    accent: 'bg-indigo-500',
+    text: 'text-indigo-700 dark:text-indigo-300',
+  },
+  payment_pending: {
     gradient: 'from-fuchsia-50 via-white to-fuchsia-50/30 dark:from-fuchsia-950/20 dark:via-gray-900 dark:to-fuchsia-950/10',
     border: 'border-fuchsia-200 dark:border-fuchsia-800/50',
     shadow: 'shadow-fuchsia-500/5 hover:shadow-fuchsia-500/20',
@@ -238,6 +262,7 @@ const TableCard: React.FC<TableCardProps> = ({
         shadow-lg ${colors.shadow}
         transition-all duration-300
         ${isPinned ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-gray-900' : ''}
+        ${table.status === 'overtime' ? 'animate-pulse ring-2 ring-orange-500 ring-offset-2 dark:ring-offset-gray-900' : ''}
       `}
     >
       {/* Dynamic Status Header */}
@@ -455,6 +480,14 @@ const TableCard: React.FC<TableCardProps> = ({
                           className="flex-1 rounded-xl"
                         />
                         <IconButton
+                          icon={<IconWashGentle />}
+                          onClick={() => onStatusChange?.('cleaning')}
+                          variant="secondary"
+                          size="md"
+                          tooltip="Set to Cleaning"
+                          className="flex-1 rounded-xl"
+                        />
+                        <IconButton
                           icon={<IconTrash />}
                           onClick={onDelete}
                           variant="error"
@@ -463,6 +496,26 @@ const TableCard: React.FC<TableCardProps> = ({
                           className="flex-1 rounded-xl"
                         />
                       </>
+                    )}
+                    {isOccupied && (
+                      <IconButton
+                        icon={<IconPause />}
+                        onClick={() => onStatusChange?.('paused')}
+                        variant="secondary"
+                        size="md"
+                        tooltip="Pause Session"
+                        className="flex-1 rounded-xl"
+                      />
+                    )}
+                    {table.status === 'paused' && (
+                      <IconButton
+                        icon={<IconPlayerPlay />}
+                        onClick={() => onStatusChange?.('occupied')}
+                        variant="primary"
+                        size="md"
+                        tooltip="Resume Session"
+                        className="flex-1 rounded-xl"
+                      />
                     )}
                   </div>
                 </motion.div>

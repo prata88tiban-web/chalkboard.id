@@ -4,7 +4,7 @@ import { pricingPackages } from './pricing-packages';
 export const tables = pgTable('tables', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 50 }).notNull(),
-  status: varchar('status', { length: 20 }).default('available'), // available, occupied, maintenance, reserved
+  status: varchar('status', { length: 20 }).default('available'), // available, occupied, maintenance, reserved, cleaning, overtime, paused, tournament, payment_pending
   hourlyRate: decimal('hourly_rate', { precision: 10, scale: 2 }).notNull(),
   perMinuteRate: decimal('per_minute_rate', { precision: 10, scale: 4 }), // Rate per minute (optional)
   pricingPackageId: uuid('pricing_package_id').references(() => pricingPackages.id), // New field for package reference

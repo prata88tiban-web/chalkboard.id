@@ -1011,6 +1011,14 @@ const TablesManagementContent = () => {
               onMove={() => (setSelectedTable(table), setSelectedSession(sessions[table.id]), setShowMoveSessionModal(true))}
               onEdit={() => (setSelectedTable(table), setFormData({ name: table.name, status: table.status }), setShowEditModal(true))}
               onDelete={() => (setSelectedTable(table), setShowDeleteModal(true))}
+              onStatusChange={async (newStatus) => {
+                const res = await fetch(`/api/tables/${table.id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: newStatus }),
+                });
+                if (res.ok) fetchTables();
+              }}
               formatCurrency={formatCurrency}
               translations={translations}
             />

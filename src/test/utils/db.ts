@@ -49,7 +49,10 @@ export async function cleanupDatabase() {
         pricing_packages,
         sessions,
         users,
-        staff
+        staff,
+        shifts,
+        reservations,
+        queues
       RESTART IDENTITY CASCADE
     `);
   } catch (error) {
@@ -67,6 +70,9 @@ export async function cleanupDatabase() {
       await db.delete(schema.sessions).execute();
       await db.delete(schema.users).execute();
       await db.delete(schema.staff).execute();
+      await db.delete(schema.shifts).execute();
+      await db.delete(schema.reservations).execute();
+      await db.delete(schema.queues).execute();
     } catch (fallbackError) {
       console.warn('⚠️ Fallback cleanup also failed:', fallbackError.message);
     }

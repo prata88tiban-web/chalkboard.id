@@ -29,6 +29,9 @@ import {
   StatusBadge,
   ActivityItem
 } from "@/components/ui";
+import ShiftManager from "@/components/operational/ShiftManager";
+import QueueManager from "@/components/operational/QueueManager";
+import ReservationPanel from "@/components/operational/ReservationPanel";
 
 interface Table {
   id: number;
@@ -78,6 +81,19 @@ const B3BillingDashboard = () => {
     sessions: { totalRevenue: 0, count: 0 },
     fnb: { totalRevenue: 0, count: 0 }
   });
+  const [lowStockItems, setLowStockItems] = useState<any[]>([]);
+
+  const fetchLowStock = async () => {
+    try {
+      const res = await fetch('/api/fnb/items');
+      if (res.ok) {
+        const items = await res.json();
+        setLowStockItems(items.filter((i: any) => i.stockQuantity <= i.minStockLevel));
+      }
+    } catch (error) {
+      console.error('Failed to fetch stock alert');
+    }
+  };
 
   const [activities, setActivities] = useState<ActivityItem[]>([]);
 
@@ -191,6 +207,7 @@ const B3BillingDashboard = () => {
     if (session) {
       fetchTables();
       fetchDailyStats();
+      fetchLowStock();
     }
   }, [session]);
 
@@ -293,6 +310,10 @@ const B3BillingDashboard = () => {
   return (
     <div className="space-y-8 pb-12">
       {/* Alert System */}
+    <div className="space-y-6">
+      <ShiftManager />
+
+      {/* Alert */}
       {alert && (
         <div className="fixed top-20 right-8 z-[100] w-96 animate-in slide-in-from-right duration-300">
           <Alert color={alert.type === 'success' ? 'success' : 'failure'} onDismiss={() => setAlert(null)}>
@@ -303,6 +324,15 @@ const B3BillingDashboard = () => {
 
       {/* Header & Quick Stats */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      {/* Live Alerts */}
+      {lowStockItems.length > 0 && (
+        <Alert color="warning" icon={IconCoffee}>
+          <span><strong>Low Stock Alert:</strong> {lowStockItems.map(i => i.name).join(', ')} need restock soon.</span>
+        </Alert>
+      )}
+
+      {/* Header */}
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-black text-dark dark:text-white tracking-tight mb-2">
             {t('title')}
@@ -322,6 +352,17 @@ const B3BillingDashboard = () => {
       </div>
 
       {/* Analytics Overview */}
+      {/* Quick Ops Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <ReservationPanel />
+        </div>
+        <div>
+          <QueueManager />
+        </div>
+      </div>
+
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <AnalyticsCard
           title="Daily Revenue"

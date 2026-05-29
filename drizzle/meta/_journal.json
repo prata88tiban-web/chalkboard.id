@@ -15,6 +15,13 @@
       "when": 1780056370761,
       "tag": "0001_soft_ultron",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780071186014,
+      "tag": "0002_powerful_ender_wiggin",
+      "breakpoints": true
     }
   ]
 }
