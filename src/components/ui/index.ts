@@ -10,3 +10,4 @@ export { default as SearchAutocomplete } from './SearchAutocomplete';
 export { default as TableCard } from './TableCard';
 export type { TableCardProps, BilliardTable, TableSession, PricingPackage } from './TableCard';
 export { Toolbar, ToolbarGroup, ToolbarDivider } from './Toolbar';
+export { default as Card } from './Card';
