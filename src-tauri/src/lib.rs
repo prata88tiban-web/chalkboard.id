@@ -18,7 +18,12 @@ pub fn run() {
   let shutdown_next_server = Arc::clone(&next_server);
 
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![print_receipt_raw])
+    .invoke_handler(tauri::generate_handler![
+      print_receipt_raw,
+      print_to_network,
+      list_serial_ports,
+      send_arduino_command
+    ])
     .setup(move |app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -66,6 +71,34 @@ fn print_receipt_raw(receipt: String, printer_name: Option<String>) -> Result<()
     let _ = printer_name;
     Err("Raw receipt printing is only supported on Windows desktop".to_string())
   }
+}
+
+#[tauri::command]
+fn print_to_network(receipt: String, ip_address: String) -> Result<(), String> {
+  let mut stream = TcpStream::connect(format!("{}:9100", ip_address))
+    .map_err(|e| format!("Failed to connect to network printer: {}", e))?;
+
+  let bytes = escpos_receipt_bytes(&receipt);
+  stream.write_all(&bytes).map_err(|e| format!("Failed to write to network printer: {}", e))?;
+  Ok(())
+}
+
+#[tauri::command]
+fn list_serial_ports() -> Result<Vec<String>, String> {
+  let ports = serialport::available_ports().map_err(|e| e.to_string())?;
+  Ok(ports.into_iter().map(|p| p.port_name).collect())
+}
+
+#[tauri::command]
+fn send_arduino_command(port_name: String, baud_rate: u32, command: String) -> Result<(), String> {
+  let mut port = serialport::new(port_name, baud_rate)
+    .timeout(Duration::from_millis(1000))
+    .open()
+    .map_err(|e| format!("Failed to open serial port: {}", e))?;
+
+  port.write_all(command.as_bytes()).map_err(|e| format!("Failed to write to serial port: {}", e))?;
+  port.write_all(b"\n").map_err(|e| format!("Failed to write newline to serial port: {}", e))?;
+  Ok(())
 }
 
 fn start_next_server<R: Runtime>(
@@ -132,7 +165,7 @@ mod raw_print {
       _ => default_printer()?,
     };
 
-    let mut bytes = escpos_receipt_bytes(&receipt);
+    let mut bytes = super::escpos_receipt_bytes(&receipt);
     if let Err(error) = raw_write(&target_printer, &mut bytes) {
       let fallback_printer = default_printer()?;
       if fallback_printer == target_printer {
@@ -143,36 +176,6 @@ mod raw_print {
     Ok(())
   }
 
-  fn escpos_receipt_bytes(receipt: &str) -> Vec<u8> {
-    let normalized = receipt.replace("\r\n", "\n").replace('\r', "\n");
-    let mut bytes = Vec::with_capacity(normalized.len() + 32);
-
-    bytes.extend_from_slice(&[0x1b, 0x40]); // Initialize printer.
-    bytes.extend_from_slice(&[0x1b, 0x61, 0x01]); // Center.
-    bytes.extend_from_slice(&[0x1b, 0x45, 0x01]); // Bold on.
-
-    for line in normalized.lines() {
-      let trimmed = line.trim_end();
-      if is_separator(trimmed) {
-        bytes.extend_from_slice(&[0x1b, 0x45, 0x00]);
-        bytes.extend_from_slice(trimmed.as_bytes());
-        bytes.extend_from_slice(b"\n");
-        bytes.extend_from_slice(&[0x1b, 0x45, 0x01]);
-      } else {
-        bytes.extend_from_slice(trimmed.as_bytes());
-        bytes.extend_from_slice(b"\n");
-      }
-    }
-
-    bytes.extend_from_slice(&[0x1b, 0x45, 0x00]); // Bold off.
-    bytes.extend_from_slice(b"\n\n");
-    bytes.extend_from_slice(&[0x1d, 0x56, 0x42, 0x00]); // Partial cut when supported.
-    bytes
-  }
-
-  fn is_separator(line: &str) -> bool {
-    !line.is_empty() && line.chars().all(|ch| ch == '-' || ch == '=')
-  }
 
   fn raw_write(
     printer_name: &str,
@@ -300,6 +303,37 @@ fn wait_for_server(port: u16, child: &mut Child) -> std::io::Result<()> {
     std::io::ErrorKind::TimedOut,
     "Next.js server did not start in time",
   ))
+}
+
+pub fn escpos_receipt_bytes(receipt: &str) -> Vec<u8> {
+  let normalized = receipt.replace("\r\n", "\n").replace('\r', "\n");
+  let mut bytes = Vec::with_capacity(normalized.len() + 32);
+
+  bytes.extend_from_slice(&[0x1b, 0x40]); // Initialize printer.
+  bytes.extend_from_slice(&[0x1b, 0x61, 0x01]); // Center.
+  bytes.extend_from_slice(&[0x1b, 0x45, 0x01]); // Bold on.
+
+  for line in normalized.lines() {
+    let trimmed = line.trim_end();
+    if is_separator(trimmed) {
+      bytes.extend_from_slice(&[0x1b, 0x45, 0x00]);
+      bytes.extend_from_slice(trimmed.as_bytes());
+      bytes.extend_from_slice(b"\n");
+      bytes.extend_from_slice(&[0x1b, 0x45, 0x01]);
+    } else {
+      bytes.extend_from_slice(trimmed.as_bytes());
+      bytes.extend_from_slice(b"\n");
+    }
+  }
+
+  bytes.extend_from_slice(&[0x1b, 0x45, 0x00]); // Bold off.
+  bytes.extend_from_slice(b"\n\n");
+  bytes.extend_from_slice(&[0x1d, 0x56, 0x42, 0x00]); // Partial cut when supported.
+  bytes
+}
+
+fn is_separator(line: &str) -> bool {
+  !line.is_empty() && line.chars().all(|ch| ch == '-' || ch == '=')
 }
 
 fn log_startup(message: &str) {

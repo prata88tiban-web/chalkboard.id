@@ -999,6 +999,31 @@
       "hours": "Hours",
       "minutes": "Minutes",
       "seconds": "Seconds"
+    },
+    "hardware": {
+      "printerTitle": "Printer Management",
+      "printerSubtitle": "Configure printers for different locations.",
+      "addPrinter": "Add Printer",
+      "printerName": "Printer Name",
+      "printerType": "Connection Type",
+      "addressIp": "Address / IP",
+      "location": "Location",
+      "usbLocal": "USB / Local",
+      "networkIp": "Network (IP)",
+      "cashier": "Cashier",
+      "kitchen": "Kitchen",
+      "bar": "Bar",
+      "arduinoTitle": "Arduino Light Controller",
+      "arduinoSubtitle": "Setup Arduino connection for table lights.",
+      "serialPort": "Serial Port",
+      "baudRate": "Baud Rate",
+      "saveArduino": "Save Arduino Settings",
+      "tableRelayMapping": "Table Relay Mapping",
+      "relayId": "Relay ID",
+      "arduinoCommand": "Arduino Command (ON/OFF)",
+      "arduinoCommandPlaceholder": "e.g., RELAY_{id}_{STATE}",
+      "testPrinter": "Test Printer",
+      "testArduino": "Test Arduino"
     }
   },
   "PricingPackages": {

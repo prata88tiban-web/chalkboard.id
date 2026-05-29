@@ -101,13 +101,45 @@ const tryTauriRawPrint = async (html: string) => {
     return false;
   }
 
-  const { invoke } = await import("@tauri-apps/api/core");
-  const printerName = window.localStorage.getItem("b3billing_thermal_printer") || DEFAULT_THERMAL_PRINTER;
-  await invoke("print_receipt_raw", {
-    receipt: htmlToReceiptText(html),
-    printerName,
-  });
-  return true;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+
+    // Fetch configured printers
+    const response = await fetch('/api/admin/printers');
+    const receiptText = htmlToReceiptText(html);
+
+    if (response.ok) {
+      const printers = await response.json();
+      const cashierPrinter = printers.find((p: any) => p.location === 'cashier' && p.isActive);
+
+      if (cashierPrinter) {
+        if (cashierPrinter.type === 'ip') {
+          await invoke("print_to_network", {
+            receipt: receiptText,
+            ipAddress: cashierPrinter.address,
+          });
+          return true;
+        } else {
+          await invoke("print_receipt_raw", {
+            receipt: receiptText,
+            printerName: cashierPrinter.address,
+          });
+          return true;
+        }
+      }
+    }
+
+    // Fallback to legacy behavior
+    const printerName = window.localStorage.getItem("b3billing_thermal_printer") || DEFAULT_THERMAL_PRINTER;
+    await invoke("print_receipt_raw", {
+      receipt: receiptText,
+      printerName,
+    });
+    return true;
+  } catch (error) {
+    console.error("Tauri print failed, falling back to browser print", error);
+    return false;
+  }
 };
 
 const browserPrint = async (html: string, options: PrintHtmlOptions) => {

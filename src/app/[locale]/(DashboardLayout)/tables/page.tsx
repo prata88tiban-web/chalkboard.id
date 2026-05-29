@@ -67,6 +67,7 @@ interface BilliardTable {
   hourlyRate: string;
   perMinuteRate?: string;
   pricingPackageId?: string;
+  arduinoRelay?: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -241,6 +242,7 @@ const TablesManagementContent = () => {
   const autoEndTriggeredRef = useRef<Set<number>>(new Set());
   const defaultStaffIdRef = useRef<string>('');
   const [pricingPackages, setPricingPackages] = useState<PricingPackage[]>([]);
+  const [arduinoConfig, setArduinoConfig] = useState({ port: '', baud: '9600', command: 'RELAY_{id}_{STATE}' });
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
   const [tableToStop, setTableToStop] = useState<BilliardTable | null>(null);
 
@@ -309,35 +311,121 @@ const TablesManagementContent = () => {
     }
   }, [showAlert, tAlerts]);
 
-  // Initial Fetch
+  // Fetch F&B data for modal
+  const fetchFnbData = async () => {
+    setFnbLoading(true);
+    try {
+      const [categoriesRes, itemsRes, staffRes] = await Promise.all([
+        fetch('/api/fnb/categories'),
+        fetch('/api/fnb/items'),
+        fetch('/api/staff')
+      ]);
+
+      if (categoriesRes.ok) {
+        const categoriesData = await categoriesRes.json();
+        setCategories(categoriesData);
+        if (categoriesData.length > 0) {
+          setActiveCategory(categoriesData[0].id);
+        }
+      }
+
+      if (itemsRes.ok) {
+        const itemsData = await itemsRes.json();
+        setItems(itemsData);
+      }
+
+      if (staffRes.ok) {
+        const staffData = await staffRes.json();
+        setStaff(staffData);
+      }
+    } catch (error) {
+      console.error('Failed to fetch F&B data:', error);
+      showAlert('error', tAlerts('failedToLoadFnBData'));
+    } finally {
+      setFnbLoading(false);
+    }
+  };
+
+  // Fetch pricing packages
+  const fetchPricingPackages = async () => {
+    try {
+      const response = await fetch('/api/pricing-packages?isActive=true');
+      if (response.ok) {
+        const data = await response.json();
+        setPricingPackages(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch pricing packages:', error);
+    }
+  };
+
+  // Fetch existing orders for a table
+  const fetchExistingOrders = async (tableId: number) => {
+    try {
+      const response = await fetch(`/api/tables/${tableId}/orders`);
+      if (response.ok) {
+        const ordersData = await response.json();
+        setExistingOrders(ordersData);
+      } else {
+        setExistingOrders([]);
+      }
+    } catch (error) {
+      console.error('Error fetching existing orders:', error);
+      setExistingOrders([]);
+    }
+  };
+
+  const fetchDefaultStaff = async () => {
+    try {
+      const response = await fetch('/api/admin/settings');
+      if (response.ok) {
+        const data = await response.json();
+        const defaultId = data.settings?.default_staff_id;
+        if (defaultId && defaultId !== '0') {
+          defaultStaffIdRef.current = defaultId;
+          setSelectedStaffId(defaultId);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch default staff:', error);
+    }
+  };
+
+  const fetchTaxSettings = async () => {
+    try {
+      const response = await fetch('/api/settings/tax/client');
+      if (response.ok) {
+        const settings = await response.json();
+        setTaxSettings(settings);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tax settings:', error);
+    }
+  };
+
+  const fetchArduinoConfig = async () => {
+    try {
+      const response = await fetch('/api/admin/settings');
+      if (response.ok) {
+        const data = await response.json();
+        setArduinoConfig({
+          port: data.settings?.arduino_port || '',
+          baud: data.settings?.arduino_baud || '9600',
+          command: data.settings?.arduino_command || 'RELAY_{id}_{STATE}'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch Arduino config:', error);
+    }
+  };
+
   useEffect(() => {
     if (session) {
       fetchTables();
-      const fetchInitialData = async () => {
-        try {
-          const [taxRes, packagesRes, staffRes, settingsRes] = await Promise.all([
-            fetch('/api/settings/tax/client'),
-            fetch('/api/pricing-packages?isActive=true'),
-            fetch('/api/staff'),
-            fetch('/api/admin/settings')
-          ]);
-
-          if (taxRes.ok) setTaxSettings(await taxRes.json());
-          if (packagesRes.ok) setPricingPackages(await packagesRes.json());
-          if (staffRes.ok) setStaff(await staffRes.json());
-          if (settingsRes.ok) {
-            const data = await settingsRes.json();
-            const defaultId = data.settings?.default_staff_id;
-            if (defaultId && defaultId !== '0') {
-              defaultStaffIdRef.current = defaultId;
-              setSelectedStaffId(defaultId);
-            }
-          }
-        } catch (error) {
-          console.error('Failed to fetch initial data:', error);
-        }
-      };
-      fetchInitialData();
+      fetchTaxSettings();
+      fetchPricingPackages();
+      fetchDefaultStaff();
+      fetchArduinoConfig();
     }
   }, [session, fetchTables]);
 
@@ -458,6 +546,49 @@ const TablesManagementContent = () => {
     }
   };
 
+  const handleDeleteTable = async () => {
+    if (!selectedTable) return;
+
+    try {
+      const response = await fetch(`/api/tables/${selectedTable.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        showAlert('success', tAlerts('tableDeletedSuccess'));
+        setShowDeleteModal(false);
+        setSelectedTable(null);
+        fetchTables();
+      } else {
+        const error = await response.json();
+        showAlert('error', error.message || tAlerts('failedToDeleteTable'));
+      }
+    } catch (error) {
+      showAlert('error', tAlerts('failedToDeleteTable'));
+    }
+  };
+
+  const triggerArduinoLight = async (relayId: number | null, state: 'ON' | 'OFF') => {
+    if (!relayId || !arduinoConfig.port) return;
+
+    if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const command = arduinoConfig.command
+          .replace('{id}', relayId.toString())
+          .replace('{STATE}', state);
+
+        await invoke('send_arduino_command', {
+          portName: arduinoConfig.port,
+          baudRate: parseInt(arduinoConfig.baud),
+          command: command
+        });
+      } catch (error) {
+        console.error('Failed to trigger Arduino light:', error);
+      }
+    }
+  };
+
   const handleStartSession = async () => {
     if (!selectedTable) return;
     if (!sessionData.pricingPackageId) {
@@ -473,6 +604,11 @@ const TablesManagementContent = () => {
       });
 
       if (response.ok) {
+        // Trigger Light ON
+        if ((selectedTable as any).arduinoRelay) {
+          triggerArduinoLight((selectedTable as any).arduinoRelay, 'ON');
+        }
+
         showAlert('success', tAlerts('sessionStartedSuccess'));
         setShowSessionModal(false);
         setSelectedTable(null);
@@ -491,6 +627,12 @@ const TablesManagementContent = () => {
     try {
       const response = await fetch(`/api/tables/${tableId}/end-session`, { method: 'POST' });
       if (response.ok) {
+        // Trigger Light OFF
+        const table = tables.find(t => t.id === tableId);
+        if (table && (table as any).arduinoRelay) {
+          triggerArduinoLight((table as any).arduinoRelay, 'OFF');
+        }
+
         const data = await response.json();
         setBillingData(data);
         setShowBillingModal(true);

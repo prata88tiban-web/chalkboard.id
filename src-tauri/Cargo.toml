@@ -24,3 +24,4 @@ log = "0.4"
 tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Printing"] }
+serialport = "4.6.0"
