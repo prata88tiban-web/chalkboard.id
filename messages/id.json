@@ -893,7 +893,14 @@
     "table": "Meja",
     "rate": "Tarif",
     "available": "Tersedia",
-    "warning": "Peringatan",
+    "occupied": "Terpakai",
+    "maintenance": "Perbaikan",
+    "reserved": "Dipesan",
+    "cleaning": "Pembersihan",
+    "waiting": "Menunggu",
+    "overtime": "Overtime",
+    "vip": "VIP",
+    "tournament": "Turnamen",
     "moveSessionWarning": "Memindahkan sesi akan mentransfer semua pesanan F&B yang tertunda ke meja baru. Penagihan akan dilanjutkan dengan durasi dan struktur tarif yang sama.",
     "movingSession": "Memindahkan Sesi...",
     "moveSession": "Pindahkan Sesi",
@@ -922,7 +929,13 @@
         "million": "Jt",
         "billion": "Mly"
       }
-    }
+    },
+    "startTime": "Waktu Mulai",
+    "endTime": "Waktu Selesai",
+    "fnb": "Pesanan F&B",
+    "cost": "Biaya",
+    "start": "Mulai",
+    "stop": "Selesai"
   },
   "AdminPage": {
     "title": "Pengaturan Admin",

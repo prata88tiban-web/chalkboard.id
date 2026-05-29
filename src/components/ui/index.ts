@@ -11,3 +11,7 @@ export { default as TableCard } from './TableCard';
 export type { TableCardProps, BilliardTable, TableSession, PricingPackage } from './TableCard';
 export { Toolbar, ToolbarGroup, ToolbarDivider } from './Toolbar';
 export { default as Card } from './Card';
+export { default as AnalyticsCard } from './AnalyticsCard';
+export { default as SmartLegend } from './SmartLegend';
+export { default as ActivityFeed } from './ActivityFeed';
+export type { ActivityItem } from './ActivityFeed';
