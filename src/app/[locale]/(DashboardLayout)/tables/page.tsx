@@ -63,7 +63,7 @@ const formatCurrency = (amount: number | string) => {
 interface BilliardTable {
   id: number;
   name: string;
-  status: 'available' | 'occupied' | 'maintenance' | 'reserved';
+  status: 'available' | 'occupied' | 'maintenance' | 'reserved' | 'cleaning' | 'waiting' | 'overtime' | 'vip' | 'tournament';
   hourlyRate: string;
   perMinuteRate?: string;
   pricingPackageId?: string;
@@ -165,6 +165,11 @@ const STATUS_FILTERS = [
   { value: 'occupied', label: 'Occupied', color: 'bg-rose-500' },
   { value: 'maintenance', label: 'Maintenance', color: 'bg-amber-500' },
   { value: 'reserved', label: 'Reserved', color: 'bg-sky-500' },
+  { value: 'cleaning', label: 'Cleaning', color: 'bg-blue-500' },
+  { value: 'waiting', label: 'Waiting', color: 'bg-indigo-500' },
+  { value: 'overtime', label: 'Overtime', color: 'bg-orange-500' },
+  { value: 'vip', label: 'VIP', color: 'bg-fuchsia-500' },
+  { value: 'tournament', label: 'Tournament', color: 'bg-violet-500' },
 ];
 
 const TablesManagementContent = () => {
@@ -1061,11 +1066,54 @@ const TablesManagementContent = () => {
                 <option value="available">Available</option>
                 <option value="maintenance">Maintenance</option>
                 <option value="reserved">Reserved</option>
+                <option value="cleaning">Cleaning</option>
+                <option value="waiting">Waiting</option>
+                <option value="overtime">Overtime</option>
+                <option value="vip">VIP</option>
+                <option value="tournament">Tournament</option>
               </Select>
             </div>
             <div className="flex gap-3 pt-4">
               <Button color="primary" className="flex-1 rounded-2xl h-12" onClick={handleCreateTable}>Create Table</Button>
               <Button color="light" className="flex-1 rounded-2xl h-12" onClick={() => setShowCreateModal(false)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Table Modal */}
+      <Modal show={showEditModal} onClose={() => setShowEditModal(false)} size="md">
+        <div className="p-8">
+          <h3 className="text-2xl font-black text-dark dark:text-white mb-6">Edit Table</h3>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-bodytext">Table Identity</Label>
+              <TextInput
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g. Table 01"
+                className="rounded-2xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-bodytext">Status</Label>
+              <Select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+              >
+                <option value="available">Available</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="reserved">Reserved</option>
+                <option value="cleaning">Cleaning</option>
+                <option value="waiting">Waiting</option>
+                <option value="overtime">Overtime</option>
+                <option value="vip">VIP</option>
+                <option value="tournament">Tournament</option>
+              </Select>
+            </div>
+            <div className="flex gap-3 pt-4">
+              <Button color="primary" className="flex-1 rounded-2xl h-12" onClick={handleUpdateTable}>Update Table</Button>
+              <Button color="light" className="flex-1 rounded-2xl h-12" onClick={() => setShowEditModal(false)}>Cancel</Button>
             </div>
           </div>
         </div>

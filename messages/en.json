@@ -893,6 +893,14 @@
     "targetTable": "Target Table",
     "rate": "Rate",
     "available": "Available",
+    "occupied": "Occupied",
+    "maintenance": "Maintenance",
+    "reserved": "Reserved",
+    "cleaning": "Cleaning",
+    "waiting": "Waiting",
+    "overtime": "Overtime",
+    "vip": "VIP",
+    "tournament": "Tournament",
     "moveSessionWarning": "Moving the session will transfer all pending F&B orders to the new table. The billing will continue with the same duration and rate structure.",
     "movingSession": "Moving Session...",
     "moveSession": "Move Session",
@@ -921,7 +929,13 @@
         "million": "M",
         "billion": "B"
       }
-    }
+    },
+    "startTime": "Start Time",
+    "endTime": "End Time",
+    "fnb": "F&B Order",
+    "cost": "Cost",
+    "start": "Start",
+    "stop": "Stop"
   },
   "AdminPage": {
     "title": "Admin Settings",

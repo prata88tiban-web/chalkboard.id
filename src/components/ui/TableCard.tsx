@@ -6,6 +6,7 @@ import {
   IconPlayerPlay,
   IconPlayerStop,
   IconToolsKitchen2,
+  IconTools,
   IconClock,
   IconTransfer,
   IconEdit,
@@ -18,6 +19,11 @@ import {
   IconPin,
   IconPinFilled,
   IconInfoCircle,
+  IconBrush,
+  IconHourglassLow,
+  IconAlertTriangle,
+  IconStar,
+  IconTrophy,
   IconPause,
   IconWashGentle,
 } from '@tabler/icons-react';
@@ -45,6 +51,7 @@ export interface PricingPackage {
 export interface BilliardTable {
   id: number;
   name: string;
+  status: 'available' | 'occupied' | 'maintenance' | 'reserved' | 'cleaning' | 'waiting' | 'overtime' | 'vip' | 'tournament';
   status: 'available' | 'occupied' | 'maintenance' | 'reserved' | 'cleaning' | 'overtime' | 'paused' | 'tournament' | 'payment_pending';
   pricingPackage?: PricingPackage;
 }
@@ -113,6 +120,18 @@ const cardColors: Record<string, { gradient: string; border: string; shadow: str
     text: 'text-sky-700 dark:text-sky-300',
   },
   cleaning: {
+    gradient: 'from-blue-50 via-white to-blue-50/30 dark:from-blue-950/20 dark:via-gray-900 dark:to-blue-950/10',
+    border: 'border-blue-200 dark:border-blue-800/50',
+    shadow: 'shadow-blue-500/5 hover:shadow-blue-500/20',
+    accent: 'bg-blue-500',
+    text: 'text-blue-700 dark:text-blue-300',
+  },
+  waiting: {
+    gradient: 'from-indigo-50 via-white to-indigo-50/30 dark:from-indigo-950/20 dark:via-gray-900 dark:to-indigo-950/10',
+    border: 'border-indigo-200 dark:border-indigo-800/50',
+    shadow: 'shadow-indigo-500/5 hover:shadow-indigo-500/20',
+    accent: 'bg-indigo-500',
+    text: 'text-indigo-700 dark:text-indigo-300',
     gradient: 'from-cyan-50 via-white to-cyan-50/30 dark:from-cyan-950/20 dark:via-gray-900 dark:to-cyan-950/10',
     border: 'border-cyan-200 dark:border-cyan-800/50',
     shadow: 'shadow-cyan-500/5 hover:shadow-cyan-500/20',
@@ -126,6 +145,7 @@ const cardColors: Record<string, { gradient: string; border: string; shadow: str
     accent: 'bg-orange-500',
     text: 'text-orange-700 dark:text-orange-300',
   },
+  vip: {
   paused: {
     gradient: 'from-slate-50 via-white to-slate-50/30 dark:from-slate-950/20 dark:via-gray-900 dark:to-slate-950/10',
     border: 'border-slate-200 dark:border-slate-800/50',
@@ -147,6 +167,13 @@ const cardColors: Record<string, { gradient: string; border: string; shadow: str
     accent: 'bg-fuchsia-500',
     text: 'text-fuchsia-700 dark:text-fuchsia-300',
   },
+  tournament: {
+    gradient: 'from-violet-50 via-white to-violet-50/30 dark:from-violet-950/20 dark:via-gray-900 dark:to-violet-950/10',
+    border: 'border-violet-200 dark:border-violet-800/50',
+    shadow: 'shadow-violet-500/5 hover:shadow-violet-500/20',
+    accent: 'bg-violet-500',
+    text: 'text-violet-700 dark:text-violet-300',
+  },
 };
 
 const TableCard: React.FC<TableCardProps> = ({
@@ -166,7 +193,7 @@ const TableCard: React.FC<TableCardProps> = ({
   translations: t,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const isOccupied = table.status === 'occupied';
+  const isOccupied = table.status === 'occupied' || table.status === 'overtime' || table.status === 'vip' || table.status === 'tournament';
   const colors = cardColors[table.status] || cardColors.available;
 
   // Calculate elapsed time
@@ -208,6 +235,19 @@ const TableCard: React.FC<TableCardProps> = ({
 
   const elapsedTime = session ? calculateElapsedTime(session.startTime) : 0;
   const cost = calculateCost();
+
+  const getStatusIcon = () => {
+    switch (table.status) {
+      case 'available': return <IconPlayerPlay className={`w-8 h-8 ${colors.text} opacity-40`} />;
+      case 'maintenance': return <IconTools className={`w-8 h-8 ${colors.text} opacity-40`} />;
+      case 'cleaning': return <IconBrush className={`w-8 h-8 ${colors.text} opacity-40`} />;
+      case 'waiting': return <IconHourglassLow className={`w-8 h-8 ${colors.text} opacity-40`} />;
+      case 'overtime': return <IconAlertTriangle className={`w-8 h-8 ${colors.text} opacity-40`} />;
+      case 'vip': return <IconStar className={`w-8 h-8 ${colors.text} opacity-40`} />;
+      case 'tournament': return <IconTrophy className={`w-8 h-8 ${colors.text} opacity-40`} />;
+      default: return <IconPlayerPlay className={`w-8 h-8 ${colors.text} opacity-40`} />;
+    }
+  };
 
   return (
     <motion.div
@@ -257,7 +297,7 @@ const TableCard: React.FC<TableCardProps> = ({
             <h3 className="text-xl font-black text-dark dark:text-white tracking-tight">
               {table.name}
             </h3>
-            <StatusBadge status={table.status} size="xs" pulse={isOccupied} />
+            <StatusBadge status={table.status} size="xs" pulse={isOccupied} showIcon />
           </div>
 
           {table.pricingPackage && (
@@ -345,11 +385,15 @@ const TableCard: React.FC<TableCardProps> = ({
               className="py-8 flex flex-col items-center justify-center text-center space-y-3"
             >
               <div className={`w-16 h-16 rounded-3xl ${colors.accent} bg-opacity-10 flex items-center justify-center`}>
-                <IconPlayerPlay className={`w-8 h-8 ${colors.text} opacity-40`} />
+                {getStatusIcon()}
               </div>
               <div>
-                <p className="text-sm font-bold text-dark dark:text-white">Ready for Action</p>
-                <p className="text-xs text-bodytext">Click start to open session</p>
+                <p className="text-sm font-bold text-dark dark:text-white">
+                  {table.status === 'available' ? 'Ready for Action' : table.status.charAt(0).toUpperCase() + table.status.slice(1)}
+                </p>
+                <p className="text-xs text-bodytext">
+                  {table.status === 'available' ? 'Click start to open session' : 'Currently unavailable for sessions'}
+                </p>
               </div>
             </motion.div>
           )}
@@ -378,7 +422,7 @@ const TableCard: React.FC<TableCardProps> = ({
             ) : (
               <button
                 onClick={onStart}
-                disabled={table.status === 'maintenance'}
+                disabled={table.status === 'maintenance' || table.status === 'cleaning'}
                 className="w-full flex items-center justify-center gap-2 py-4 px-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-300 dark:disabled:bg-gray-800 disabled:cursor-not-allowed text-white font-black text-base transition-all shadow-lg shadow-emerald-500/25 active:scale-95"
               >
                 <IconPlayerPlay className="w-5 h-5" />
