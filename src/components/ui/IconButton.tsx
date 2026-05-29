@@ -1,12 +1,13 @@
 'use client';
 
 import React from 'react';
+import { motion } from 'framer-motion';
 
 interface IconButtonProps {
   icon: React.ReactNode;
-  onClick?: () => void;
-  variant?: 'primary' | 'secondary' | 'success' | 'error' | 'warning' | 'ghost';
-  size?: 'xs' | 'sm' | 'md' | 'lg';
+  onClick?: (e: React.MouseEvent) => void;
+  variant?: 'primary' | 'secondary' | 'success' | 'error' | 'warning' | 'ghost' | 'glass';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   disabled?: boolean;
   loading?: boolean;
   tooltip?: string;
@@ -14,26 +15,29 @@ interface IconButtonProps {
 }
 
 const variantStyles = {
-  primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm',
+  primary: 'bg-primary text-white hover:bg-primary/90 shadow-lg shadow-primary/20',
   secondary: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700',
-  success: 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm',
-  error: 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm',
-  warning: 'bg-amber-500 text-white hover:bg-amber-600 shadow-sm',
+  success: 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/20',
+  error: 'bg-rose-500 text-white hover:bg-rose-600 shadow-lg shadow-rose-500/20',
+  warning: 'bg-amber-500 text-white hover:bg-amber-600 shadow-lg shadow-amber-500/20',
   ghost: 'bg-transparent text-bodytext hover:bg-gray-100 dark:hover:bg-gray-800',
+  glass: 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20',
 };
 
 const sizeStyles = {
-  xs: 'w-7 h-7',
-  sm: 'w-8 h-8',
-  md: 'w-10 h-10',
-  lg: 'w-12 h-12',
+  xs: 'w-7 h-7 rounded-lg',
+  sm: 'w-9 h-9 rounded-xl',
+  md: 'w-11 h-11 rounded-2xl',
+  lg: 'w-14 h-14 rounded-2xl',
+  xl: 'w-16 h-16 rounded-3xl',
 };
 
 const iconSizeStyles = {
   xs: '[&>svg]:w-3.5 [&>svg]:h-3.5',
-  sm: '[&>svg]:w-4 [&>svg]:h-4',
-  md: '[&>svg]:w-5 [&>svg]:h-5',
-  lg: '[&>svg]:w-6 [&>svg]:h-6',
+  sm: '[&>svg]:w-4.5 [&>svg]:h-4.5',
+  md: '[&>svg]:w-5.5 [&>svg]:h-5.5',
+  lg: '[&>svg]:w-7 [&>svg]:h-7',
+  xl: '[&>svg]:w-8 [&>svg]:h-8',
 };
 
 const IconButton: React.FC<IconButtonProps> = ({
@@ -47,15 +51,17 @@ const IconButton: React.FC<IconButtonProps> = ({
   className = '',
 }) => {
   return (
-    <button
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
       onClick={onClick}
       disabled={disabled || loading}
       title={tooltip}
       className={`
-        inline-flex items-center justify-center rounded-xl
+        inline-flex items-center justify-center
         transition-all duration-200 ease-out
-        focus:outline-none focus:ring-2 focus:ring-primary/50
-        disabled:opacity-50 disabled:cursor-not-allowed
+        focus:outline-none focus:ring-2 focus:ring-primary/40
+        disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100
         ${variantStyles[variant]}
         ${sizeStyles[size]}
         ${iconSizeStyles[size]}
@@ -86,7 +92,7 @@ const IconButton: React.FC<IconButtonProps> = ({
       ) : (
         icon
       )}
-    </button>
+    </motion.button>
   );
 };
 

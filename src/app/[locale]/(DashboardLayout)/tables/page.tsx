@@ -3,26 +3,28 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from 'next-intl';
-import { Button, Modal, TextInput, Label, Select, Tabs } from "flowbite-react";
+import { Button, Modal, TextInput, Label, Select } from "flowbite-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   IconPlus, 
   IconPlayerPlay, 
   IconPlayerStop,
-  IconCurrencyDollar,
   IconClock,
   IconCheck,
   IconToolsKitchen2,
   IconShoppingCart,
   IconMinus,
   IconX,
-  IconChevronRight,
-  IconChevronLeft,
+  IconSearch,
   IconFilter,
   IconLayoutGrid,
-  IconList,
-  IconSearch,
-  IconInfoCircle,
-  IconBulb
+  IconSettings,
+  IconChevronRight,
+  IconHistory,
+  IconChartBar,
+  IconHelp,
+  IconUser,
+  IconTrash
 } from "@tabler/icons-react";
 import DefaultSpinner from "@/components/ui-components/Spinner/DefaultSpinner";
 import DurationManagement from "@/components/tables/DurationManagement";
@@ -32,7 +34,7 @@ import { PricingPackage } from "@/schema";
 import { calculateTax as calculateTaxFromSettings, formatTaxLabel } from "@/lib/tax";
 import { printHtml } from "@/lib/print-html";
 
-// Import new UI components
+// Import enhanced UI components
 import {
   ToastProvider,
   useToast,
@@ -43,6 +45,9 @@ import {
   Toolbar,
   ToolbarGroup,
   ToolbarDivider,
+  TableCard,
+  IconButton,
+  Tooltip
 } from "@/components/ui";
 
 // Helper function to format currency
@@ -58,7 +63,7 @@ const formatCurrency = (amount: number | string) => {
 interface BilliardTable {
   id: number;
   name: string;
-  status: string;
+  status: 'available' | 'occupied' | 'maintenance' | 'reserved';
   hourlyRate: string;
   perMinuteRate?: string;
   pricingPackageId?: string;
@@ -155,44 +160,20 @@ interface Staff {
 
 // Status filter options
 const STATUS_FILTERS = [
-  { value: 'all', label: 'All Tables', color: 'bg-gray-500' },
+  { value: 'all', label: 'All', color: 'bg-gray-500' },
   { value: 'available', label: 'Available', color: 'bg-emerald-500' },
   { value: 'occupied', label: 'Occupied', color: 'bg-rose-500' },
   { value: 'maintenance', label: 'Maintenance', color: 'bg-amber-500' },
   { value: 'reserved', label: 'Reserved', color: 'bg-sky-500' },
 ];
 
-// Card color configurations
-const cardColors: Record<string, { gradient: string; border: string; header: string }> = {
-  available: {
-    gradient: 'from-emerald-500/5 via-emerald-500/10 to-emerald-600/5',
-    border: 'border-emerald-200 dark:border-emerald-800 hover:border-emerald-400',
-    header: 'bg-gradient-to-r from-emerald-500 to-emerald-600',
-  },
-  occupied: {
-    gradient: 'from-rose-500/5 via-rose-500/10 to-rose-600/5',
-    border: 'border-rose-200 dark:border-rose-800 hover:border-rose-400',
-    header: 'bg-gradient-to-r from-rose-500 to-rose-600',
-  },
-  maintenance: {
-    gradient: 'from-amber-500/5 via-amber-500/10 to-amber-600/5',
-    border: 'border-amber-200 dark:border-amber-800 hover:border-amber-400',
-    header: 'bg-gradient-to-r from-amber-500 to-amber-600',
-  },
-  reserved: {
-    gradient: 'from-sky-500/5 via-sky-500/10 to-sky-600/5',
-    border: 'border-sky-200 dark:border-sky-800 hover:border-sky-400',
-    header: 'bg-gradient-to-r from-sky-500 to-sky-600',
-  },
-};
-
-// Main component wrapped with Toast provider
 const TablesManagementContent = () => {
   const sessionHook = useSession();
   const { data: session, status } = sessionHook || { data: null, status: 'loading' };
   const router = useRouter();
   const locale = useLocale();
   const { addToast } = useToast();
+
   const t = useTranslations('TablesManagement');
   const tCards = useTranslations('TableCard');
   const tAlerts = useTranslations('Alerts');
@@ -204,6 +185,7 @@ const TablesManagementContent = () => {
   // State
   const [tables, setTables] = useState<BilliardTable[]>([]);
   const [sessions, setSessions] = useState<{ [key: number]: TableSession }>({});
+  const [allOrders, setAllOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -246,7 +228,7 @@ const TablesManagementContent = () => {
   // Form states
   const [formData, setFormData] = useState({
     name: '',
-    status: 'available'
+    status: 'available' as 'available' | 'maintenance' | 'reserved'
   });
 
   const [sessionData, setSessionData] = useState({
@@ -280,9 +262,13 @@ const TablesManagementContent = () => {
   const fetchTables = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const response = await fetch('/api/tables');
-      if (response.ok) {
-        const data = await response.json();
+      const [tablesRes, ordersRes] = await Promise.all([
+        fetch('/api/tables'),
+        fetch('/api/fnb/orders')
+      ]);
+
+      if (tablesRes.ok) {
+        const data = await tablesRes.json();
         const sortedTables = data.sort((a: BilliardTable, b: BilliardTable) => {
           const numA = parseInt((a.name.match(/(\d+)/) || ['0', '0'])[1], 10);
           const numB = parseInt((b.name.match(/(\d+)/) || ['0', '0'])[1], 10);
@@ -309,8 +295,13 @@ const TablesManagementContent = () => {
             }
           }
         });
-        setLastRefresh(new Date());
       }
+
+      if (ordersRes.ok) {
+        setAllOrders(await ordersRes.json());
+      }
+
+      setLastRefresh(new Date());
     } catch (error) {
       console.error('Failed to fetch tables:', error);
       showAlert('error', tAlerts('genericError'));
@@ -438,32 +429,30 @@ const TablesManagementContent = () => {
     }
   }, [session, fetchTables]);
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh logic
   useEffect(() => {
     const interval = setInterval(() => {
-      if (session && !isRefreshing) {
-        fetchTables();
-      }
+      if (session && !isRefreshing) fetchTables();
     }, 30000);
     return () => clearInterval(interval);
   }, [session, isRefreshing, fetchTables]);
 
-  // Update current time every second for real-time duration display
+  // Real-time clock
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Show notification when planned sessions expire
+  // Time Expired Alerts
   useEffect(() => {
     tables.forEach((table) => {
       const tableSession = sessions[table.id];
-      if (!tableSession) return;
-      if ((tableSession.plannedDuration || 0) <= 0) return;
-      const elapsed = calculateElapsedTime(tableSession.startTime);
+      if (!tableSession || (tableSession.plannedDuration || 0) <= 0) return;
+
+      const start = new Date(tableSession.startTime);
+      const elapsed = Math.floor((currentTime.getTime() - start.getTime()) / 1000);
       const remaining = tableSession.plannedDuration * 60 - elapsed;
+
       if (remaining <= 0 && !autoEndTriggeredRef.current.has(table.id)) {
         autoEndTriggeredRef.current.add(table.id);
         showAlert('warning', t('timeExpired.notification', { tableName: table.name }));
@@ -474,13 +463,7 @@ const TablesManagementContent = () => {
   // Filter and sort tables
   const filteredTables = useMemo(() => {
     let result = [...tables];
-    
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      result = result.filter(t => t.status === statusFilter);
-    }
-    
-    // Apply search filter
+    if (statusFilter !== 'all') result = result.filter(t => t.status === statusFilter);
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(t => 
@@ -488,8 +471,6 @@ const TablesManagementContent = () => {
         (sessions[t.id]?.customerName?.toLowerCase().includes(query))
       );
     }
-    
-    // Sort: pinned first, then by name
     result.sort((a, b) => {
       const aPinned = pinnedTables.includes(a.id);
       const bPinned = pinnedTables.includes(b.id);
@@ -497,208 +478,30 @@ const TablesManagementContent = () => {
       if (!aPinned && bPinned) return 1;
       return 0;
     });
-    
     return result;
   }, [tables, statusFilter, searchQuery, pinnedTables, sessions]);
 
-  // Search autocomplete items
   const searchItems = useMemo(() => {
-    return tables.map(t => ({
+    const tableItems = tables.map(t => ({
       id: t.id,
       type: 'table' as const,
       label: t.name,
       sublabel: sessions[t.id]?.customerName || undefined,
       status: t.status,
     }));
-  }, [tables, sessions]);
 
-  // Stats
-  const stats = useMemo(() => ({
-    total: tables.length,
-    available: tables.filter(t => t.status === 'available').length,
-    occupied: tables.filter(t => t.status === 'occupied').length,
-    maintenance: tables.filter(t => t.status === 'maintenance').length,
-    reserved: tables.filter(t => t.status === 'reserved').length,
-  }), [tables]);
+    const orderItems = allOrders.map(o => ({
+      id: o.id,
+      type: 'order' as const,
+      label: `Order #${o.orderNumber}`,
+      sublabel: o.customerName || 'Walk-in Customer',
+      status: o.status,
+    }));
 
-  // Toggle pin
-  const togglePin = (tableId: number) => {
-    setPinnedTables(prev => 
-      prev.includes(tableId) 
-        ? prev.filter(id => id !== tableId)
-        : [...prev, tableId]
-    );
-  };
+    return [...tableItems, ...orderItems];
+  }, [tables, sessions, allOrders]);
 
-  // F&B Cart Functions
-  const addToCart = (item: FnbItem) => {
-    if (item.stockQuantity <= 0) {
-      showAlert('error', tAlerts('itemOutOfStockNamed', { itemName: item.name }));
-      return;
-    }
-
-    const existingItem = cart.find(cartItem => cartItem.id === item.id);
-    
-    if (existingItem) {
-      if (existingItem.quantity >= item.stockQuantity) {
-        showAlert('error', tAlerts('notEnoughStockAvailable'));
-        return;
-      }
-      setCart(cart.map(cartItem => 
-        cartItem.id === item.id 
-          ? { ...cartItem, quantity: cartItem.quantity + 1 }
-          : cartItem
-      ));
-    } else {
-      setCart([...cart, {
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: 1,
-        unit: item.unit
-      }]);
-    }
-  };
-
-  const removeFromCart = (itemId: number) => {
-    setCart(cart.filter(item => item.id !== itemId));
-  };
-
-  const updateQuantity = (itemId: number, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(itemId);
-      return;
-    }
-
-    const item = items.find(i => i.id === itemId);
-    if (item && quantity > item.stockQuantity) {
-      showAlert('error', tAlerts('notEnoughStockAvailable'));
-      return;
-    }
-
-    setCart(cart.map(cartItem => 
-      cartItem.id === itemId 
-        ? { ...cartItem, quantity }
-        : cartItem
-    ));
-  };
-
-  const clearCart = () => {
-    setCart([]);
-  };
-
-  const addFromExistingToCart = (orderItem: ExistingOrderItem) => {
-    const existingItem = cart.find(cartItem => cartItem.id === orderItem.itemId);
-    
-    if (existingItem) {
-      setCart(cart.map(cartItem => 
-        cartItem.id === orderItem.itemId 
-          ? { ...cartItem, quantity: cartItem.quantity + 1 }
-          : cartItem
-      ));
-    } else {
-      setCart([...cart, {
-        id: orderItem.itemId,
-        name: orderItem.itemName,
-        price: orderItem.unitPrice,
-        quantity: 1,
-        unit: orderItem.unit
-      }]);
-    }
-  };
-
-  const calculateTotal = () => {
-    return cart.reduce((total, item) => total + (parseFloat(item.price) * item.quantity), 0);
-  };
-
-  const calculateTax = (subtotal: number) => {
-    return calculateTaxFromSettings(subtotal, taxSettings, false);
-  };
-
-  // Process F&B Order
-  const processFnbOrder = async () => {
-    if (!selectedTable || !sessions[selectedTable.id]) {
-      showAlert('error', tAlerts('tableSessionNotFound'));
-      return;
-    }
-
-    if (cart.length === 0) {
-      showAlert('error', tAlerts('cartIsEmpty'));
-      return;
-    }
-
-    if (!selectedStaffId) {
-      showAlert('error', tAlerts('pleaseSelectStaffMember'));
-      return;
-    }
-
-    try {
-      const tableSession = sessions[selectedTable.id];
-      const subtotal = calculateTotal();
-      const tax = calculateTax(subtotal);
-      const total = subtotal + tax;
-
-      const orderPayload = {
-        context: 'table_session',
-        customerName: tableSession.customerName,
-        customerPhone: null,
-        tableId: selectedTable.id,
-        staffId: parseInt(selectedStaffId),
-        subtotal: subtotal.toFixed(2),
-        tax: tax.toFixed(2),
-        total: total.toFixed(2),
-        notes: `Order for table ${selectedTable.name}`,
-        items: cart.map(item => ({
-          itemId: item.id,
-          quantity: item.quantity,
-          unitPrice: item.price,
-          subtotal: (parseFloat(item.price) * item.quantity).toFixed(2)
-        }))
-      };
-
-      const response = await fetch('/api/fnb/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderPayload)
-      });
-
-      if (response.ok) {
-        const orderResult = await response.json();
-        showAlert('success', tAlerts('orderCreatedAddedToBill', { orderNumber: orderResult.orderNumber, tableName: selectedTable.name }));
-        clearCart();
-        setSelectedStaffId(defaultStaffIdRef.current);
-        if (selectedTable) {
-          await fetchExistingOrders(selectedTable.id);
-        }
-        fetchTables();
-      } else {
-        const error = await response.json();
-        showAlert('error', error.message || tAlerts('failedToCreateOrder'));
-      }
-    } catch (error) {
-      console.error('Error processing F&B order:', error);
-      showAlert('error', tAlerts('failedToProcessOrder'));
-    }
-  };
-
-  // Open F&B Modal
-  const openFnbModal = async (table: BilliardTable) => {
-    if (!sessions[table.id]) {
-      showAlert('error', tAlerts('noActiveSessionFound'));
-      return;
-    }
-    
-    setSelectedTable(table);
-    setShowFnbModal(true);
-    
-    if (categories.length === 0) {
-      await fetchFnbData();
-    }
-
-    await fetchExistingOrders(table.id);
-  };
-
-  // Table CRUD handlers
+  // Table Handlers
   const handleCreateTable = async () => {
     try {
       const response = await fetch('/api/tables', {
@@ -723,7 +526,6 @@ const TablesManagementContent = () => {
 
   const handleUpdateTable = async () => {
     if (!selectedTable) return;
-
     try {
       const response = await fetch(`/api/tables/${selectedTable.id}`, {
         method: 'PUT',
@@ -734,8 +536,6 @@ const TablesManagementContent = () => {
       if (response.ok) {
         showAlert('success', tAlerts('tableUpdatedSuccess'));
         setShowEditModal(false);
-        setSelectedTable(null);
-        setFormData({ name: '', status: 'available' });
         fetchTables();
       } else {
         const error = await response.json();
@@ -791,7 +591,6 @@ const TablesManagementContent = () => {
 
   const handleStartSession = async () => {
     if (!selectedTable) return;
-    
     if (!sessionData.pricingPackageId) {
       showAlert('error', tSessionModal('packageRequired'));
       return;
@@ -826,10 +625,7 @@ const TablesManagementContent = () => {
 
   const handleEndSession = async (tableId: number) => {
     try {
-      const response = await fetch(`/api/tables/${tableId}/end-session`, {
-        method: 'POST',
-      });
-
+      const response = await fetch(`/api/tables/${tableId}/end-session`, { method: 'POST' });
       if (response.ok) {
         // Trigger Light OFF
         const table = tables.find(t => t.id === tableId);
@@ -850,97 +646,95 @@ const TablesManagementContent = () => {
     }
   };
 
-  const openEditModal = (table: BilliardTable) => {
-    setSelectedTable(table);
-    setFormData({ name: table.name, status: table.status });
-    setShowEditModal(true);
-  };
-
-  const openDeleteModal = (table: BilliardTable) => {
-    setSelectedTable(table);
-    setShowDeleteModal(true);
-  };
-
-  const openSessionModal = (table: BilliardTable) => {
-    setSelectedTable(table);
-    setSessionData({ customerName: '', mode: 'open', plannedDuration: 60, pricingPackageId: '' });
-    setShowSessionModal(true);
-  };
-
-  const openDurationModal = (table: BilliardTable, tableSession: TableSession) => {
-    setSelectedTable(table);
-    setSelectedSession(tableSession);
-    setShowDurationModal(true);
-  };
-
-  const openMoveSessionModal = (table: BilliardTable, tableSession: TableSession) => {
-    setSelectedTable(table);
-    setSelectedSession(tableSession);
-    setShowMoveSessionModal(true);
-  };
-
-  const handleDurationUpdate = async (sessionId: number, newDuration: number) => {
+  // F&B Handlers
+  const fetchFnbData = async () => {
+    setFnbLoading(true);
     try {
-      const tableSession = selectedSession || sessions[selectedTable?.id || 0];
-      const response = await fetch(`/api/table-sessions/${sessionId}/update-duration`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          durationType: tableSession?.durationType || 'hourly',
-          actualDuration: newDuration
-        }),
-      });
-
-      if (response.ok) {
-        showAlert('success', tAlerts('durationUpdatedSuccess'));
-        fetchTables();
-      } else {
-        const error = await response.json();
-        showAlert('error', error.message || tAlerts('failedToUpdateDuration'));
+      const [categoriesRes, itemsRes] = await Promise.all([
+        fetch('/api/fnb/categories'),
+        fetch('/api/fnb/items')
+      ]);
+      if (categoriesRes.ok) {
+        const cats = await categoriesRes.json();
+        setCategories(cats);
+        if (cats.length > 0) setActiveCategory(cats[0].id);
       }
-    } catch (error) {
-      showAlert('error', tAlerts('failedToUpdateDuration'));
+      if (itemsRes.ok) setItems(await itemsRes.json());
+    } finally {
+      setFnbLoading(false);
     }
   };
 
-  const handleSessionMove = (newTableId: number, newTableName: string) => {
-    showAlert('success', tAlerts('sessionMovedSuccess', { tableName: newTableName }));
-    setShowMoveSessionModal(false);
-    fetchTables();
+  const openFnbModal = async (table: BilliardTable) => {
+    setSelectedTable(table);
+    setShowFnbModal(true);
+    if (categories.length === 0) await fetchFnbData();
+    try {
+      const res = await fetch(`/api/tables/${table.id}/orders`);
+      setExistingOrders(res.ok ? await res.json() : []);
+    } catch {
+      setExistingOrders([]);
+    }
   };
 
-  const handleBillingConfirm = async (finalBillingData: any) => {
+  const addToCart = (item: FnbItem) => {
+    if (item.stockQuantity <= 0) {
+      showAlert('error', tAlerts('itemOutOfStockNamed', { itemName: item.name }));
+      return;
+    }
+    const existing = cart.find(c => c.id === item.id);
+    if (existing) {
+      if (existing.quantity >= item.stockQuantity) {
+        showAlert('error', tAlerts('notEnoughStockAvailable'));
+        return;
+      }
+      setCart(cart.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
+    } else {
+      setCart([...cart, { id: item.id, name: item.name, price: item.price, quantity: 1, unit: item.unit }]);
+    }
+  };
+
+  const processFnbOrder = async () => {
+    if (!selectedTable || !sessions[selectedTable.id] || cart.length === 0 || !selectedStaffId) {
+      showAlert('error', 'Please fill all required fields');
+      return;
+    }
+
     try {
-      const billing = finalBillingData.billing;
-      const response = await fetch('/api/payments', {
+      const tableSession = sessions[selectedTable.id];
+      const subtotal = cart.reduce((acc, c) => acc + parseFloat(c.price) * c.quantity, 0);
+      const tax = calculateTaxFromSettings(subtotal, taxSettings, false);
+      const total = subtotal + tax;
+
+      const response = await fetch('/api/fnb/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: billing.sessionId || finalBillingData.session.id,
-          tableId: billing.tableId,
-          customerName: billing.customerName || finalBillingData.session.customerName,
-          customerPhone: billing.customerPhone || finalBillingData.session.customerPhone,
-          tableAmount: billing.tableCost,
-          fnbAmount: billing.fnbTotalCost,
-          taxAmount: billing.totalTaxAmount || 0,
-          totalAmount: billing.totalCost,
-          staffId: billing.staffId,
-          paymentMethods: [{ type: 'cash', amount: billing.totalCost }],
-        }),
+          context: 'table_session',
+          customerName: tableSession.customerName,
+          tableId: selectedTable.id,
+          staffId: parseInt(selectedStaffId),
+          subtotal: subtotal.toFixed(2),
+          tax: tax.toFixed(2),
+          total: total.toFixed(2),
+          notes: `Order for ${selectedTable.name}`,
+          items: cart.map(item => ({
+            itemId: item.id,
+            quantity: item.quantity,
+            unitPrice: item.price,
+            subtotal: (parseFloat(item.price) * item.quantity).toFixed(2)
+          }))
+        })
       });
 
       if (response.ok) {
-        const paymentData = await response.json();
-        printCheckoutReceipt(paymentData, finalBillingData);
-        setShowBillingModal(false);
-        setBillingData(null);
-        router.push(`/${locale}/transactions?paymentId=${paymentData.id}`);
-      } else {
-        const error = await response.json();
-        showAlert('error', error.error || 'Failed to process payment');
+        showAlert('success', 'Order added to bill');
+        setCart([]);
+        setShowFnbModal(false);
+        fetchTables();
       }
-    } catch (error) {
-      showAlert('error', 'Failed to process payment');
+    } catch {
+      showAlert('error', 'Failed to process order');
     }
   };
 
@@ -1070,147 +864,109 @@ const TablesManagementContent = () => {
       });
   };
 
-  // Helper functions
-  const calculateElapsedTime = (startTime: string) => {
-    const start = new Date(startTime);
-    return Math.floor((currentTime.getTime() - start.getTime()) / 1000);
-  };
-
-  const formatDuration = (totalSeconds: number) => {
-    const hours = Math.floor(totalSeconds / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatTime = (dateTime: string | Date) => {
-    const date = new Date(dateTime);
-    return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
-  };
-
-  const calculateCost = (table: BilliardTable, totalSeconds: number, tableSession?: TableSession) => {
-    const pricingPackage = (tableSession as any)?.pricingPackage || table.pricingPackage;
-    if (!pricingPackage) return 0;
-
-    if (pricingPackage.category === 'per_minute') {
-      const rate = parseFloat(pricingPackage.perMinuteRate || '0');
-      const minutes = Math.ceil(totalSeconds / 60);
-      return minutes * rate;
-    } else {
-      const rate = parseFloat(pricingPackage.hourlyRate || '0');
-      const hours = Math.ceil(totalSeconds / 3600);
-      return hours * rate;
-    }
-  };
-
-  const getStockStatus = (item: FnbItem) => {
-    if (item.stockQuantity <= 0) {
-      return { color: 'error', text: 'Out of Stock', bgColor: 'bg-rose-50', textColor: 'text-rose-600' };
-    } else if (item.stockQuantity <= item.minStockLevel) {
-      return { color: 'warning', text: 'Low Stock', bgColor: 'bg-amber-50', textColor: 'text-amber-600' };
-    } else {
-      return { color: 'success', text: 'In Stock', bgColor: 'bg-emerald-50', textColor: 'text-emerald-600' };
-    }
-  };
-
-  const filteredFnbItems = items.filter(item => {
-    const categoryMatch = activeCategory ? item.categoryId === activeCategory : true;
-    const searchMatch = fnbSearchQuery.trim() === '' || 
-      item.name.toLowerCase().includes(fnbSearchQuery.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(fnbSearchQuery.toLowerCase()));
-    return categoryMatch && searchMatch;
-  });
-
   if (status === "loading" || loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <DefaultSpinner />
-      </div>
-    );
+    return <div className="flex justify-center items-center h-screen"><DefaultSpinner /></div>;
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Welcome Hints */}
-      {showHints && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Hint type="info" title="Quick Start Guide" dismissible onDismiss={() => setShowHints(false)}>
-            <p>Click on a table card to manage sessions. Green cards are available, red cards are occupied.</p>
-          </Hint>
-          <Hint type="tip" title="Pro Tip">
-            <p>Use the search bar to quickly find tables or customers. Pin frequently used tables for quick access.</p>
-          </Hint>
-        </div>
-      )}
+  const translations = {
+    startTime: tCards('startTime'),
+    endTime: tCards('endTime'),
+    duration: tCards('duration'),
+    cost: tCards('cost'),
+    start: tCards('start'),
+    stop: tCards('stop'),
+    fnb: tCards('fnb'),
+    edit: tCards('edit'),
+    delete: tCards('delete'),
+    move: tCards('move'),
+    available: tCards('available'),
+    occupied: tCards('occupied'),
+    maintenance: tCards('maintenance'),
+    reserved: tCards('reserved'),
+  };
 
-      {/* Header with Stats */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-dark dark:text-white">{t('title')}</h1>
-            <p className="text-bodytext mt-1">{t('subtitle')}</p>
+  return (
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020617] p-4 md:p-8 space-y-8">
+      {/* Dynamic Header Section */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2.5 bg-primary rounded-2xl shadow-lg shadow-primary/20">
+              <IconLayoutGrid className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-3xl font-black text-dark dark:text-white tracking-tight">
+              {t('title')}
+            </h1>
           </div>
-          
-          {/* Stats Pills */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl">
-              <span className="text-sm text-bodytext">Total:</span>
-              <span className="font-bold text-dark dark:text-white">{stats.total}</span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl">
-              <div className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="font-semibold text-emerald-700 dark:text-emerald-300">{stats.available}</span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-rose-100 dark:bg-rose-900/30 rounded-xl">
-              <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-              <span className="font-semibold text-rose-700 dark:text-rose-300">{stats.occupied}</span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
-              <div className="w-2 h-2 rounded-full bg-amber-500" />
-              <span className="font-semibold text-amber-700 dark:text-amber-300">{stats.maintenance}</span>
-            </div>
+          <p className="text-bodytext font-medium opacity-70">
+            {t('subtitle')}
+          </p>
+        </motion.div>
+
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="hidden sm:flex p-1.5 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+            {STATUS_FILTERS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
+                className={`
+                  px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all
+                  ${statusFilter === f.value
+                    ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                    : 'text-bodytext hover:bg-gray-50 dark:hover:bg-gray-800'
+                  }
+                `}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
+          <Tooltip content="Live Table Insights">
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+              <IconChartBar className="w-5 h-5 text-primary" />
+              <span className="text-sm font-bold text-dark dark:text-white">
+                {tables.filter(t => t.status === 'occupied').length}/{tables.length}
+              </span>
+            </div>
+          </Tooltip>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <Toolbar>
-        <ToolbarGroup className="flex-1">
+      <AnimatePresence>
+        {showHints && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Hint type="tip" title="Quick Search" dismissible onDismiss={() => setShowHints(false)}>
+              Press <span className="font-black px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 rounded">⌘ K</span> to quickly jump to any table or active order.
+            </Hint>
+            <Hint type="info" title="Session Colors">
+              Tables are color-coded by status. <span className="text-emerald-600 font-bold">Green</span> for available, <span className="text-rose-600 font-bold">Red</span> for occupied sessions.
+            </Hint>
+            <Hint type="success" title="Auto-Sync Active">
+              Table statuses and timers refresh automatically every 30 seconds for real-time accuracy.
+            </Hint>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modern Toolbar */}
+      <Toolbar className="sticky top-4 z-30 shadow-2xl shadow-primary/5">
+        <ToolbarGroup className="flex-1 min-w-[300px]">
           <SearchAutocomplete
             items={searchItems}
             onSelect={(item) => {
-              const table = tables.find(t => t.id === item.id);
-              if (table) {
-                if (table.status === 'occupied') {
-                  openFnbModal(table);
-                } else {
-                  openSessionModal(table);
-                }
+              if (item.type === 'table') {
+                const table = tables.find(t => t.id === item.id);
+                if (table) table.status === 'occupied' ? openFnbModal(table) : (setSelectedTable(table), setShowSessionModal(true));
+              } else if (item.type === 'order') {
+                router.push(`/${locale}/fnb?orderId=${item.id}`);
               }
             }}
-            placeholder="Search tables, customers..."
-            className="w-full max-w-md"
+            placeholder="Jump to Table or Order..."
+            className="w-full"
           />
-        </ToolbarGroup>
-        
-        <ToolbarDivider />
-        
-        <ToolbarGroup>
-          {STATUS_FILTERS.map(filter => (
-            <button
-              key={filter.value}
-              onClick={() => setStatusFilter(filter.value)}
-              className={`
-                px-4 py-2 rounded-xl text-sm font-medium transition-all
-                ${statusFilter === filter.value
-                  ? 'bg-primary text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-bodytext hover:bg-gray-200 dark:hover:bg-gray-700'
-                }
-              `}
-            >
-              {filter.label}
-            </button>
-          ))}
         </ToolbarGroup>
         
         <ToolbarDivider />
@@ -1219,668 +975,361 @@ const TablesManagementContent = () => {
           <AutoRefreshIndicator
             isRefreshing={isRefreshing}
             lastRefresh={lastRefresh}
-            interval={30}
             onManualRefresh={fetchTables}
           />
+          <IconButton
+            icon={<IconPlus />}
+            variant="primary"
+            size="lg"
+            tooltip="Add New Table"
+            onClick={() => setShowCreateModal(true)}
+          />
+          <IconButton icon={<IconSettings />} variant="secondary" size="lg" tooltip="Table Settings" />
         </ToolbarGroup>
-        
-        <ToolbarDivider />
-        
-        <Button color="primary" onClick={() => setShowCreateModal(true)}>
-          <IconPlus className="w-4 h-4 mr-2" />
-          {t('addNewTable')}
-        </Button>
       </Toolbar>
 
-      {/* Tables Grid - 36 tables max per screen (6x6) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-        {filteredTables.slice(0, 36).map((table) => {
-          const tableSession = sessions[table.id];
-          const isOccupied = table.status === 'occupied';
-          const elapsedTime = tableSession ? calculateElapsedTime(tableSession.startTime) : 0;
-          const cost = calculateCost(table, elapsedTime, tableSession);
-          const isPinned = pinnedTables.includes(table.id);
-          const colors = cardColors[table.status] || cardColors.available;
-
-          return (
-            <div
+      {/* Main Grid View */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6">
+        <AnimatePresence mode="popLayout">
+          {filteredTables.slice(0, 36).map((table) => (
+            <TableCard
               key={table.id}
-              className={`
-                relative rounded-2xl overflow-hidden
-                bg-gradient-to-br ${colors.gradient}
-                border-2 ${colors.border}
-                shadow-md hover:shadow-xl
-                transition-all duration-300 ease-out
-                hover:-translate-y-1
-                ${isPinned ? 'ring-2 ring-primary ring-offset-2' : ''}
-              `}
-            >
-              {/* Status Header */}
-              <div className={`h-1.5 w-full ${colors.header}`} />
-
-              {/* Pin indicator */}
-              {isPinned && (
-                <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 2a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 2zM10 15a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 15zM10 7a3 3 0 100 6 3 3 0 000-6z" />
-                  </svg>
-                </div>
-              )}
-
-              {/* Card Content */}
-              <div className="p-3">
-                {/* Header */}
-                <div className="flex items-start justify-between mb-2">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-base font-bold text-dark dark:text-white truncate">
-                      {table.name}
-                    </h3>
-                    {table.pricingPackage && (
-                      <p className="text-[10px] text-bodytext truncate">
-                        {table.pricingPackage.name}
-                      </p>
-                    )}
-                  </div>
-                  <StatusBadge status={table.status as any} size="xs" pulse={isOccupied} />
-                </div>
-
-                {/* Session Info */}
-                {isOccupied && tableSession && (
-                  <div className="space-y-1.5 mb-3">
-                    <p className="text-xs font-medium text-dark dark:text-white truncate">
-                      {tableSession.customerName}
-                    </p>
-                    <div className="flex items-center justify-between text-[10px] text-bodytext">
-                      <span>Start: {formatTime(tableSession.startTime)}</span>
-                    </div>
-                    <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-bodytext">Duration</span>
-                        <span className="text-sm font-bold font-mono text-dark dark:text-white">
-                          {formatDuration(elapsedTime)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs text-bodytext">Cost</span>
-                        <span className="text-sm font-bold text-primary">
-                          {formatCurrency(cost)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="space-y-2">
-                  {isOccupied ? (
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => openFnbModal(table)}
-                        className="flex-1 flex items-center justify-center gap-1 py-2 px-2 rounded-xl bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors"
-                        title="Add F&B Order"
-                      >
-                        <IconToolsKitchen2 className="w-3.5 h-3.5" />
-                        F&B
-                      </button>
-                      <button
-                        onClick={() => { setTableToStop(table); setShowStopConfirmModal(true); }}
-                        className="flex-1 flex items-center justify-center gap-1 py-2 px-2 rounded-xl bg-rose-500 text-white text-xs font-medium hover:bg-rose-600 transition-colors"
-                        title="End Session"
-                      >
-                        <IconPlayerStop className="w-3.5 h-3.5" />
-                        Stop
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => openSessionModal(table)}
-                      className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors"
-                      title="Start Session"
-                    >
-                      <IconPlayerPlay className="w-4 h-4" />
-                      Start
-                    </button>
-                  )}
-
-                  {/* Secondary Actions */}
-                  {isOccupied && tableSession && (
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => openDurationModal(table, tableSession)}
-                        className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-bodytext text-[10px] font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                        title="Manage Duration"
-                      >
-                        <IconClock className="w-3 h-3" />
-                        Duration
-                      </button>
-                      <button
-                        onClick={() => openMoveSessionModal(table, tableSession)}
-                        className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-bodytext text-[10px] font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                        title="Move Session"
-                      >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                        </svg>
-                        Move
-                      </button>
-                    </div>
-                  )}
-
-                  {!isOccupied && (
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => openEditModal(table)}
-                        className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-bodytext text-[10px] font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                        title="Edit Table"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => togglePin(table.id)}
-                        className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[10px] font-medium transition-colors ${
-                          isPinned 
-                            ? 'bg-primary text-white' 
-                            : 'bg-gray-100 dark:bg-gray-800 text-bodytext hover:bg-gray-200 dark:hover:bg-gray-700'
-                        }`}
-                        title={isPinned ? 'Unpin' : 'Pin'}
-                      >
-                        {isPinned ? 'Unpin' : 'Pin'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+              table={table}
+              session={sessions[table.id]}
+              currentTime={currentTime}
+              isPinned={pinnedTables.includes(table.id)}
+              onPin={() => setPinnedTables(p => p.includes(table.id) ? p.filter(id => id !== table.id) : [...p, table.id])}
+              onStart={() => (setSelectedTable(table), setShowSessionModal(true))}
+              onStop={() => (setTableToStop(table), setShowStopConfirmModal(true))}
+              onFnb={() => openFnbModal(table)}
+              onDuration={() => (setSelectedTable(table), setSelectedSession(sessions[table.id]), setShowDurationModal(true))}
+              onMove={() => (setSelectedTable(table), setSelectedSession(sessions[table.id]), setShowMoveSessionModal(true))}
+              onEdit={() => (setSelectedTable(table), setFormData({ name: table.name, status: table.status }), setShowEditModal(true))}
+              onDelete={() => (setSelectedTable(table), setShowDeleteModal(true))}
+              formatCurrency={formatCurrency}
+              translations={translations}
+            />
+          ))}
+        </AnimatePresence>
       </div>
 
-      {/* Pagination hint */}
-      {filteredTables.length > 36 && (
-        <div className="text-center py-4">
-          <p className="text-sm text-bodytext">
-            Showing 36 of {filteredTables.length} tables. Use filters to narrow down results.
-          </p>
-        </div>
-      )}
-
-      {/* Empty State */}
+      {/* Empty States & Pagination */}
       {filteredTables.length === 0 && (
-        <div className="text-center py-16 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
-          <div className="w-20 h-20 mx-auto mb-4 bg-primary/10 rounded-2xl flex items-center justify-center">
-            <IconSearch className="w-10 h-10 text-primary" />
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center justify-center py-24 bg-white dark:bg-gray-900 rounded-[40px] border border-dashed border-gray-200 dark:border-gray-800"
+        >
+          <div className="w-24 h-24 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6">
+            <IconSearch className="w-12 h-12 text-bodytext opacity-20" />
           </div>
-          <h3 className="text-xl font-semibold text-dark dark:text-white mb-2">
-            {searchQuery ? 'No tables found' : t('noTables.title')}
-          </h3>
-          <p className="text-bodytext mb-4 max-w-md mx-auto">
-            {searchQuery 
-              ? `No tables match "${searchQuery}". Try a different search term or clear filters.`
-              : t('noTables.subtitle')
-            }
-          </p>
-          {searchQuery && (
-            <Button color="light" onClick={() => { setSearchQuery(''); setStatusFilter('all'); }}>
-              Clear Filters
-            </Button>
-          )}
-        </div>
+          <h2 className="text-2xl font-black text-dark dark:text-white mb-2">No Tables Found</h2>
+          <p className="text-bodytext max-w-sm text-center">Try adjusting your filters or search query to find what you're looking for.</p>
+        </motion.div>
       )}
 
-      {/* All Modals - keeping existing functionality */}
-      {/* F&B Modal */}
-      <Modal show={showFnbModal} onClose={() => setShowFnbModal(false)} size="7xl">
-        <Modal.Header>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 rounded-xl">
-              <IconToolsKitchen2 className="w-6 h-6 text-amber-600" />
-            </div>
-            <div>
-              <h3 className="text-xl font-semibold">F&B Order - {selectedTable?.name}</h3>
-              <p className="text-sm text-bodytext">
-                Customer: {selectedTable && sessions[selectedTable.id] ? sessions[selectedTable.id].customerName : 'N/A'}
-              </p>
-            </div>
-          </div>
-        </Modal.Header>
-        <Modal.Body>
-          {fnbLoading ? (
-            <div className="flex justify-center items-center py-12">
-              <DefaultSpinner />
-            </div>
-          ) : (
-            <div className="flex gap-6 h-[600px]">
-              {/* Left Pane - Menu Items */}
-              <div className="flex-1">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 h-full">
-                  <h3 className="text-lg font-semibold text-dark dark:text-white mb-4">
-                    {tCommon('menuItems')}
-                  </h3>
-                  
-                  {/* Search Input */}
-                  <div className="relative mb-4">
-                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                      <IconSearch className="w-4 h-4 text-gray-400" />
-                    </div>
-                    <TextInput
-                      type="search"
-                      placeholder="Search menu items..."
-                      value={fnbSearchQuery}
-                      onChange={(e) => setFnbSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                  
-                  {/* Categories */}
-                  <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                    <Button
-                      color={!activeCategory ? "primary" : "light"}
-                      size="xs"
-                      onClick={() => setActiveCategory(null)}
-                      className="whitespace-nowrap"
-                    >
-                      All
-                    </Button>
-                    {categories.map(category => (
-                      <Button
-                        key={category.id}
-                        color={activeCategory === category.id ? "primary" : "light"}
-                        size="xs"
-                        onClick={() => setActiveCategory(category.id)}
-                        className="whitespace-nowrap"
-                      >
-                        {category.name}
-                      </Button>
-                    ))}
-                  </div>
-
-                  {/* Items Grid */}
-                  <div className="grid grid-cols-2 gap-2 max-h-[420px] overflow-y-auto">
-                    {filteredFnbItems.map(item => {
-                      const stockStatus = getStockStatus(item);
-                      const isOutOfStock = item.stockQuantity <= 0;
-                      
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => !isOutOfStock && addToCart(item)}
-                          className={`
-                            p-3 rounded-xl border-2 transition-all cursor-pointer
-                            ${isOutOfStock 
-                              ? 'opacity-50 cursor-not-allowed border-gray-200' 
-                              : `hover:shadow-md hover:-translate-y-0.5 ${stockStatus.bgColor} border-transparent`
-                            }
-                          `}
-                        >
-                          <div className="flex justify-between items-start mb-1">
-                            <h4 className="font-medium text-dark dark:text-white text-sm truncate flex-1">
-                              {item.name}
-                            </h4>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${stockStatus.bgColor} ${stockStatus.textColor}`}>
-                              {item.stockQuantity}
-                            </span>
-                          </div>
-                          <p className="font-bold text-primary text-sm">
-                            {formatCurrency(parseFloat(item.price))}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Pane - Cart */}
-              <div className="w-96">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 h-full flex flex-col">
-                  {/* Existing Orders */}
-                  {existingOrders.length > 0 && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-semibold text-dark dark:text-white mb-2">Current Orders</h4>
-                      <div className="space-y-2 max-h-32 overflow-y-auto">
-                        {existingOrders.map(order => (
-                          <div key={order.id} className="p-2 bg-sky-50 dark:bg-sky-900/30 rounded-lg border border-sky-200 dark:border-sky-800">
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="font-medium">#{order.orderNumber}</span>
-                              <span className="font-bold text-primary">{formatCurrency(parseFloat(order.total))}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Cart */}
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-sm font-semibold text-dark dark:text-white">
-                        New Order ({cart.length})
-                      </h4>
-                      {cart.length > 0 && (
-                        <button onClick={clearCart} className="text-xs text-rose-600 hover:text-rose-700">
-                          Clear
-                        </button>
-                      )}
-                    </div>
-
-                    {cart.length === 0 ? (
-                      <div className="text-center py-8">
-                        <IconShoppingCart className="w-12 h-12 text-bodytext mx-auto mb-2" />
-                        <p className="text-sm text-bodytext">Cart is empty</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {cart.map(item => (
-                          <div key={item.id} className="flex items-center gap-2 p-2 bg-white dark:bg-gray-700 rounded-lg">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{item.name}</p>
-                              <p className="text-xs text-bodytext">{formatCurrency(parseFloat(item.price))}</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-600 flex items-center justify-center"
-                              >
-                                <IconMinus className="w-3 h-3" />
-                              </button>
-                              <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
-                              <button
-                                onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-600 flex items-center justify-center"
-                              >
-                                <IconPlus className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={() => removeFromCart(item.id)}
-                                className="w-6 h-6 rounded bg-rose-100 text-rose-600 flex items-center justify-center ml-1"
-                              >
-                                <IconX className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Staff Selection & Total */}
-                  {cart.length > 0 && (
-                    <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-600">
-                      <div className="mb-3">
-                        <Label htmlFor="staffSelect" value="Staff *" className="text-xs" />
-                        <Select
-                          id="staffSelect"
-                          value={selectedStaffId}
-                          onChange={(e) => setSelectedStaffId(e.target.value)}
-                          sizing="sm"
-                        >
-                          <option value="">Select staff</option>
-                          {staff.filter(s => s.isActive).map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </Select>
-                      </div>
-                      
-                      <div className="space-y-1 text-sm mb-3">
-                        <div className="flex justify-between">
-                          <span>Subtotal</span>
-                          <span>{formatCurrency(calculateTotal())}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>{formatTaxLabel(taxSettings)}</span>
-                          <span>{formatCurrency(calculateTax(calculateTotal()))}</span>
-                        </div>
-                        <div className="flex justify-between font-bold text-base pt-2 border-t">
-                          <span>Total</span>
-                          <span className="text-primary">{formatCurrency(calculateTotal() + calculateTax(calculateTotal()))}</span>
-                        </div>
-                      </div>
-
-                      <Button
-                        color="primary"
-                        className="w-full"
-                        onClick={processFnbOrder}
-                        disabled={!selectedStaffId}
-                      >
-                        <IconCheck className="w-4 h-4 mr-2" />
-                        Add to Bill
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </Modal.Body>
-      </Modal>
+      {/* All Modals (Integrated with new styling) */}
 
       {/* Create Table Modal */}
-      <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)}>
-        <Modal.Header>{tModals('tableModal.createTitle')}</Modal.Header>
-        <Modal.Body>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="name" value={tModals('tableModal.tableName')} />
+      <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} size="md">
+        <div className="p-8">
+          <h3 className="text-2xl font-black text-dark dark:text-white mb-6">Create New Table</h3>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-bodytext">Table Identity</Label>
               <TextInput
-                id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder={tModals('tableModal.tableNamePlaceholder')}
-                required
+                placeholder="e.g. Table 01"
+                className="rounded-2xl"
               />
             </div>
-            <div>
-              <Label htmlFor="status" value={tModals('tableModal.status')} />
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-bodytext">Initial Status</Label>
               <Select
-                id="status"
                 value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
               >
                 <option value="available">Available</option>
                 <option value="maintenance">Maintenance</option>
                 <option value="reserved">Reserved</option>
               </Select>
             </div>
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button color="primary" onClick={handleCreateTable}>
-            {tModals('tableModal.createButton')}
-          </Button>
-          <Button color="secondary" onClick={() => setShowCreateModal(false)}>
-            {tModals('tableModal.cancelButton')}
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Edit Table Modal */}
-      <Modal show={showEditModal} onClose={() => setShowEditModal(false)}>
-        <Modal.Header>{tModals('tableModal.editTitle')}</Modal.Header>
-        <Modal.Body>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="editName" value="Table Name" />
-              <TextInput
-                id="editName"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="editStatus" value="Status" />
-              <Select
-                id="editStatus"
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              >
-                <option value="available">Available</option>
-                <option value="maintenance">Maintenance</option>
-                <option value="reserved">Reserved</option>
-              </Select>
+            <div className="flex gap-3 pt-4">
+              <Button color="primary" className="flex-1 rounded-2xl h-12" onClick={handleCreateTable}>Create Table</Button>
+              <Button color="light" className="flex-1 rounded-2xl h-12" onClick={() => setShowCreateModal(false)}>Cancel</Button>
             </div>
           </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button color="primary" onClick={handleUpdateTable}>Update Table</Button>
-          <Button color="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
-        <Modal.Header>Delete Table</Modal.Header>
-        <Modal.Body>
-          <p className="text-bodytext">
-            Are you sure you want to delete <strong>{selectedTable?.name}</strong>? This action cannot be undone.
-          </p>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button color="error" onClick={handleDeleteTable}>Delete</Button>
-          <Button color="secondary" onClick={() => setShowDeleteModal(false)}>Cancel</Button>
-        </Modal.Footer>
+        </div>
       </Modal>
 
       {/* Start Session Modal */}
-      <Modal show={showSessionModal} onClose={() => setShowSessionModal(false)}>
-        <Modal.Header>{tSessionModal('startTitle', { tableName: selectedTable?.name || '' })}</Modal.Header>
-        <Modal.Body>
-          <div className="space-y-4">
-            <Hint type="info">
-              <p>Enter customer name and select a pricing package to start the session.</p>
-            </Hint>
+      <Modal show={showSessionModal} onClose={() => setShowSessionModal(false)} size="lg">
+        <div className="p-8">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <IconPlayerPlay className="w-8 h-8 text-white" />
+            </div>
             <div>
-              <Label htmlFor="customerName" value={tSessionModal('customerLabel')} />
+              <h3 className="text-2xl font-black text-dark dark:text-white">Start Session</h3>
+              <p className="text-bodytext font-medium">{selectedTable?.name}</p>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-bodytext">Customer Name</Label>
               <TextInput
-                id="customerName"
+                icon={IconUser}
                 value={sessionData.customerName}
                 onChange={(e) => setSessionData({ ...sessionData, customerName: e.target.value })}
-                placeholder={tSessionModal('customerPlaceholder')}
-                required
+                placeholder="Guest Name"
               />
             </div>
-            <div>
-              <Label htmlFor="sessionMode" value={tSessionModal('modeLabel')} />
-              <Select
-                id="sessionMode"
-                value={sessionData.mode}
-                onChange={(e) => setSessionData({ ...sessionData, mode: e.target.value as 'open' | 'planned' })}
-              >
-                <option value="open">{tSessionModal('modeOptions.open')}</option>
-                <option value="planned">{tSessionModal('modeOptions.planned')}</option>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="pricingPackage" value={tSessionModal('pricingPackageLabel')} />
-              <Select
-                id="pricingPackage"
-                value={sessionData.pricingPackageId}
-                onChange={(e) => setSessionData({ ...sessionData, pricingPackageId: e.target.value })}
-                required
-              >
-                <option value="">{tSessionModal('selectPackage')}</option>
-                {pricingPackages.map((pkg) => (
-                  <option key={pkg.id} value={pkg.id}>
-                    {pkg.name} - {pkg.category === 'hourly' 
-                      ? `${formatCurrency(Number(pkg.hourlyRate))}/hour`
-                      : `${formatCurrency(Number(pkg.perMinuteRate))}/min`
-                    }
-                    {pkg.isDefault && ' (Default)'}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            {sessionData.mode === 'planned' && (
-              <div>
-                <Label htmlFor="plannedDuration" value={tSessionModal('plannedDurationLabel')} />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-bodytext">Pricing Package</Label>
                 <Select
-                  id="plannedDuration"
-                  value={sessionData.plannedDuration}
-                  onChange={(e) => setSessionData({ ...sessionData, plannedDuration: parseInt(e.target.value) })}
+                  value={sessionData.pricingPackageId}
+                  onChange={(e) => setSessionData({ ...sessionData, pricingPackageId: e.target.value })}
                 >
-                  <option value={30}>{tSessionModal('durationOptions.30minutes')}</option>
-                  <option value={60}>{tSessionModal('durationOptions.60minutes')}</option>
-                  <option value={90}>{tSessionModal('durationOptions.90minutes')}</option>
-                  <option value={120}>{tSessionModal('durationOptions.120minutes')}</option>
-                  <option value={180}>{tSessionModal('durationOptions.180minutes')}</option>
+                  <option value="">Select Package</option>
+                  {pricingPackages.map((pkg) => (
+                    <option key={pkg.id} value={pkg.id}>{pkg.name}</option>
+                  ))}
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-bodytext">Session Mode</Label>
+                <Select
+                  value={sessionData.mode}
+                  onChange={(e) => setSessionData({ ...sessionData, mode: e.target.value as any })}
+                >
+                  <option value="open">Open Time</option>
+                  <option value="planned">Planned Duration</option>
+                </Select>
+              </div>
+            </div>
+
+            {sessionData.mode === 'planned' && (
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-bodytext">Duration (Minutes)</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[60, 120, 180, 240].map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setSessionData({...sessionData, plannedDuration: m})}
+                      className={`py-3 rounded-xl text-sm font-black transition-all ${sessionData.plannedDuration === m ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-gray-100 dark:bg-gray-800 text-bodytext hover:bg-gray-200'}`}
+                    >
+                      {m/60}h
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
+
+            <div className="flex gap-4 pt-4">
+              <Button color="primary" className="flex-1 rounded-2xl h-14 text-lg font-black" onClick={handleStartSession}>
+                Confirm & Start
+              </Button>
+            </div>
           </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button color="primary" onClick={handleStartSession}>
-            <IconPlayerPlay className="w-4 h-4 mr-2" />
-            Start Session
-          </Button>
-          <Button color="secondary" onClick={() => setShowSessionModal(false)}>Cancel</Button>
-        </Modal.Footer>
+        </div>
       </Modal>
 
-      {/* Enhanced Billing Modal */}
+      {/* F&B Order Modal */}
+      <Modal show={showFnbModal} onClose={() => setShowFnbModal(false)} size="7xl">
+        <div className="flex flex-col lg:flex-row h-[85vh] overflow-hidden">
+          {/* Menu Explorer */}
+          <div className="flex-1 flex flex-col p-8 bg-white dark:bg-gray-900">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-dark dark:text-white">F&B Menu</h3>
+                <p className="text-bodytext text-sm">{selectedTable?.name} • {sessions[selectedTable?.id || 0]?.customerName}</p>
+              </div>
+              <div className="relative w-64">
+                <IconSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-bodytext" />
+                <input
+                  type="text"
+                  placeholder="Search items..."
+                  value={fnbSearchQuery}
+                  onChange={(e) => setFnbSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-gray-100 dark:bg-gray-800 border-none rounded-2xl text-sm focus:ring-2 focus:ring-primary transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+              <button
+                onClick={() => setActiveCategory(null)}
+                className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${!activeCategory ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-gray-100 dark:bg-gray-800 text-bodytext hover:bg-gray-200'}`}
+              >
+                All
+              </button>
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeCategory === cat.id ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-gray-100 dark:bg-gray-800 text-bodytext hover:bg-gray-200'}`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
+              {items.filter(i => (!activeCategory || i.categoryId === activeCategory) && (i.name.toLowerCase().includes(fnbSearchQuery.toLowerCase()))).map(item => (
+                <motion.button
+                  key={item.id}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => addToCart(item)}
+                  className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-[32px] border-2 border-transparent hover:border-primary/20 hover:bg-white dark:hover:bg-gray-800 text-left transition-all group"
+                >
+                  <div className="mb-4 aspect-square bg-white dark:bg-gray-900 rounded-2xl flex items-center justify-center text-3xl shadow-sm group-hover:shadow-md transition-all">
+                    🍔
+                  </div>
+                  <h4 className="font-black text-dark dark:text-white text-sm line-clamp-1 mb-1">{item.name}</h4>
+                  <p className="text-primary font-black text-base">{formatCurrency(item.price)}</p>
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-tighter text-bodytext opacity-50">{item.stockQuantity} Left</span>
+                    <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                      <IconPlus className="w-4 h-4 text-white" />
+                    </div>
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          </div>
+
+          {/* Checkout Side */}
+          <div className="w-full lg:w-[400px] bg-gray-50 dark:bg-[#0f172a] border-l border-gray-100 dark:border-gray-800 flex flex-col">
+            <div className="p-8 flex-1 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xl font-black text-dark dark:text-white">Current Order</h3>
+                <button onClick={() => setCart([])} className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all">
+                  <IconX className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                <AnimatePresence initial={false}>
+                  {cart.map(item => (
+                    <motion.div
+                      key={item.id}
+                      layout
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="p-4 bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center gap-4"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-black text-sm text-dark dark:text-white truncate">{item.name}</h4>
+                        <p className="text-xs font-bold text-primary">{formatCurrency(item.price)}</p>
+                      </div>
+                      <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-800 p-1 rounded-2xl">
+                        <button
+                          onClick={() => setCart(cart.map(c => c.id === item.id ? {...c, quantity: Math.max(0, c.quantity - 1)} : c).filter(c => c.quantity > 0))}
+                          className="w-8 h-8 flex items-center justify-center rounded-xl bg-white dark:bg-gray-700 shadow-sm"
+                        >
+                          <IconMinus className="w-3 h-3" />
+                        </button>
+                        <span className="w-4 text-center font-black text-sm">{item.quantity}</span>
+                        <button
+                          onClick={() => setCart(cart.map(c => c.id === item.id ? {...c, quantity: c.quantity + 1} : c))}
+                          className="w-8 h-8 flex items-center justify-center rounded-xl bg-primary text-white shadow-md shadow-primary/20"
+                        >
+                          <IconPlus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+                {cart.length === 0 && (
+                  <div className="h-full flex flex-col items-center justify-center opacity-30">
+                    <IconShoppingCart className="w-16 h-16 mb-4" />
+                    <p className="font-black uppercase tracking-widest text-sm">Cart is empty</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-800 space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-bodytext">Assign Staff</Label>
+                  <Select
+                    sizing="sm"
+                    value={selectedStaffId}
+                    onChange={(e) => setSelectedStaffId(e.target.value)}
+                  >
+                    <option value="">Select Staff</option>
+                    {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm font-bold text-bodytext">
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(cart.reduce((acc, c) => acc + parseFloat(c.price)*c.quantity, 0))}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold text-bodytext">
+                    <span>Tax</span>
+                    <span>{formatCurrency(calculateTaxFromSettings(cart.reduce((acc, c) => acc + parseFloat(c.price)*c.quantity, 0), taxSettings, false))}</span>
+                  </div>
+                  <div className="flex justify-between text-2xl font-black text-dark dark:text-white pt-2 border-t border-gray-100 dark:border-gray-800">
+                    <span>Total</span>
+                    <span className="text-primary">{formatCurrency(cart.reduce((acc, c) => acc + parseFloat(c.price)*c.quantity, 0) + calculateTaxFromSettings(cart.reduce((acc, c) => acc + parseFloat(c.price)*c.quantity, 0), taxSettings, false))}</span>
+                  </div>
+                </div>
+
+                <Button
+                  color="primary"
+                  disabled={cart.length === 0 || !selectedStaffId}
+                  className="w-full rounded-[24px] h-16 text-lg font-black"
+                  onClick={processFnbOrder}
+                >
+                  Place Order
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Legacy Modals (Updated wrappers) */}
       <EnhancedBillingModal
         show={showBillingModal}
         onClose={() => setShowBillingModal(false)}
         billingData={billingData}
-        onConfirmPayment={handleBillingConfirm}
+        onConfirmPayment={async (final) => {
+          try {
+            const b = final.billing;
+            const res = await fetch('/api/payments', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sessionId: b.sessionId || final.session.id,
+                tableId: b.tableId,
+                customerName: b.customerName || final.session.customerName,
+                tableAmount: b.tableCost,
+                fnbAmount: b.fnbTotalCost,
+                taxAmount: b.totalTaxAmount || 0,
+                totalAmount: b.totalCost,
+                staffId: b.staffId,
+                paymentMethods: [{ type: 'cash', amount: b.totalCost }],
+              }),
+            });
+
+            if (res.ok) {
+              const payment = await res.json();
+              printCheckoutReceipt(payment, final);
+              router.push(`/${locale}/transactions?paymentId=${payment.id}`);
+            }
+          } catch {
+            showAlert('error', 'Payment processing failed');
+          }
+        }}
       />
 
-      {/* Duration Management Modal */}
-      <Modal show={showDurationModal} onClose={() => setShowDurationModal(false)} size="md">
-        <Modal.Header>{tCommon('durationManagement')}</Modal.Header>
-        <Modal.Body>
-          {selectedSession && selectedTable && (
-            <DurationManagement
-              sessionId={selectedSession.id}
-              currentDurationType={(selectedSession as any).durationType || 'hourly'}
-              elapsedMinutes={calculateElapsedTime(selectedSession.startTime) / 60}
-              onDurationUpdate={(newDuration) => handleDurationUpdate(selectedSession.id, newDuration)}
-            />
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button color="secondary" onClick={() => setShowDurationModal(false)}>{tCommon('close')}</Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Stop Session Confirmation Modal */}
-      <Modal show={showStopConfirmModal} onClose={() => setShowStopConfirmModal(false)} size="md">
-        <Modal.Header>{t('stopConfirmation.title')}</Modal.Header>
-        <Modal.Body>
-          <div className="space-y-4">
-            <p className="text-dark dark:text-white">
-              {t('stopConfirmation.message', { tableName: tableToStop?.name || '' })}
-            </p>
-            {tableToStop && sessions[tableToStop.id] && (
-              <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-xl">
-                <p className="text-sm text-bodytext">
-                  {t('stopConfirmation.currentDuration')}:{' '}
-                  <span className="font-bold text-dark dark:text-white">
-                    {Math.floor(calculateElapsedTime(sessions[tableToStop.id].startTime) / 60)} {tCommon('minutes')}
-                  </span>
-                </p>
-              </div>
-            )}
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            color="error"
-            onClick={() => {
-              if (tableToStop) handleEndSession(tableToStop.id);
-              setShowStopConfirmModal(false);
-              setTableToStop(null);
-            }}
-          >
-            {t('stopConfirmation.confirm')}
-          </Button>
-          <Button color="secondary" onClick={() => { setShowStopConfirmModal(false); setTableToStop(null); }}>
-            {t('stopConfirmation.cancel')}
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Move Session Modal */}
       <MoveSessionModal
         show={showMoveSessionModal}
         onClose={() => setShowMoveSessionModal(false)}
@@ -1889,19 +1338,53 @@ const TablesManagementContent = () => {
         sessionId={selectedSession?.id || 0}
         customerName={selectedSession?.customerName || ''}
         tables={tables}
-        onSessionMoved={handleSessionMove}
+        onSessionMoved={() => {
+          showAlert('success', 'Session moved successfully');
+          setShowMoveSessionModal(false);
+          fetchTables();
+        }}
       />
+
+      <Modal show={showStopConfirmModal} onClose={() => setShowStopConfirmModal(false)} size="md">
+        <div className="p-8 text-center">
+          <div className="w-20 h-20 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <IconPlayerStop className="w-10 h-10" />
+          </div>
+          <h3 className="text-2xl font-black text-dark dark:text-white mb-2">End Session?</h3>
+          <p className="text-bodytext mb-8">Are you sure you want to stop the session for <strong>{tableToStop?.name}</strong>? This will calculate the final billing.</p>
+          <div className="flex gap-4">
+            <Button color="error" className="flex-1 rounded-2xl h-12" onClick={() => { if(tableToStop) handleEndSession(tableToStop.id); setShowStopConfirmModal(false); }}>Yes, Stop</Button>
+            <Button color="light" className="flex-1 rounded-2xl h-12" onClick={() => setShowStopConfirmModal(false)}>Cancel</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal show={showDeleteModal} onClose={() => setShowDeleteModal(false)} size="md">
+        <div className="p-8 text-center">
+          <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <IconTrash className="w-10 h-10" />
+          </div>
+          <h3 className="text-xl font-black mb-2">Delete Table?</h3>
+          <p className="text-bodytext mb-8">Permanently delete <strong>{selectedTable?.name}</strong>? This action cannot be reversed.</p>
+          <div className="flex gap-4">
+            <Button color="error" className="flex-1 rounded-2xl" onClick={async () => {
+              if(!selectedTable) return;
+              const res = await fetch(`/api/tables/${selectedTable.id}`, { method: 'DELETE' });
+              if(res.ok) { showAlert('success', 'Table deleted'); setShowDeleteModal(false); fetchTables(); }
+            }}>Delete</Button>
+            <Button color="light" className="flex-1 rounded-2xl" onClick={() => setShowDeleteModal(false)}>Cancel</Button>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   );
 };
 
-// Main export with ToastProvider wrapper
-const TablesManagement = () => {
+export default function TablesManagement() {
   return (
     <ToastProvider>
       <TablesManagementContent />
     </ToastProvider>
   );
-};
-
-export default TablesManagement;
+}
