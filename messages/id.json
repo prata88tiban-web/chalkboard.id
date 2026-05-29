@@ -71,7 +71,7 @@
     "hourly": "Per-jam"
   },
   "Dashboard": {
-    "title": "Dasbor ChalkBoard",
+    "title": "Dasbor B3-Billing Billiard Batam",
     "subtitle": "Selamat datang kembali, {name}",
     "loading": "Memuat dasbor...",
     "redirecting": "Mengalihkan ke halaman masuk...",
@@ -527,7 +527,7 @@
         "total": "TOTAL",
         "footer": {
           "thankYou": "Terima kasih atas kunjungan Anda!",
-          "businessName": "Billiard Hall ChalkBoard",
+          "businessName": "B3-Billing Billiard Batam",
           "generated": "Dicetak"
         }
       }

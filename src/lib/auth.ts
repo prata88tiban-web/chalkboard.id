@@ -38,7 +38,7 @@ const authOptions: AuthOptions = {
           return {
             id: '1',
             email: defaultEmail,
-            name: 'ChalkBoard Admin',
+            name: 'B3-Billing Admin',
             role: 'admin',
           };
         }
@@ -73,7 +73,7 @@ const authOptions: AuthOptions = {
         return {
           id: dbUser.id.toString(),
           email: dbUser.email,
-          name: dbUser.name || 'ChalkBoard User',
+          name: dbUser.name || 'B3-Billing User',
           role: dbUser.role || 'staff',
         };
       }

@@ -35,7 +35,7 @@ interface TableSession {
   status: string;
 }
 
-const ChalkBoardDashboard = () => {
+const B3BillingDashboard = () => {
   const { data: session, status } = useSession();
   const router = useRouter();
   const t = useTranslations('Dashboard');
@@ -666,4 +666,4 @@ const ChalkBoardDashboard = () => {
   );
 };
 
-export default ChalkBoardDashboard; 
+export default B3BillingDashboard; 

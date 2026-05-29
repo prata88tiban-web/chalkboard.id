@@ -9,8 +9,8 @@ let testConnection: ReturnType<typeof postgres> | null = null;
 export async function getTestDatabase() {
   if (!testDb) {
     const connectionString = process.env.DATABASE_URL || 
-      (process.env.CI ? 'postgresql://postgres:postgres@localhost:5432/chalkboard_test' : 
-       'postgresql://postgres:postgres@localhost:5433/chalkboard_test');
+      (process.env.CI ? 'postgresql://postgres:postgres@localhost:5432/b3billing_test' : 
+       'postgresql://postgres:postgres@localhost:5433/b3billing_test');
     
     try {
       testConnection = postgres(connectionString, { max: 1 });

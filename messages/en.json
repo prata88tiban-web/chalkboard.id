@@ -71,7 +71,7 @@
     "hourly": "Hourly"
   },
   "Dashboard": {
-    "title": "ChalkBoard Dashboard",
+    "title": "B3-Billing Billiard Batam Dashboard",
     "subtitle": "Welcome back, {name}",
     "loading": "Loading dashboard...",
     "redirecting": "Redirecting to sign in...",
@@ -527,7 +527,7 @@
         "total": "TOTAL",
         "footer": {
           "thankYou": "Thank you for visiting!",
-          "businessName": "ChalkBoard Billiard Hall",
+          "businessName": "B3-Billing Billiard Batam",
           "generated": "Generated"
         }
       }
