@@ -15,11 +15,11 @@ const Archivement = () => {
               <div className="flex flex-wrap lg:gap-12 gap-6">
                 <div>
                   <h3 className="text-primary lg:text-64 text-5xl leading-tight font-normal">2019</h3>
-                  <span className="text-sm text-dark opacity-90">When we founded Modernize</span>
+                  <span className="text-sm text-dark opacity-90">When we founded B3-Billing Billiard Batam</span>
                 </div>
                 <div>
                   <h3 className="text-primary lg:text-64 text-5xl leading-tight font-normal">300k+</h3>
-                  <span className="text-sm text-dark opacity-90">Customers on Modernize</span>
+                  <span className="text-sm text-dark opacity-90">Customers on B3-Billing Billiard Batam</span>
                 </div>
                 <div>
                   <h3 className="text-primary lg:text-64 text-5xl leading-tight font-normal">25k+</h3>

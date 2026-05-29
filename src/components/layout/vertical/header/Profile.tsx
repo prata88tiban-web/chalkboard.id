@@ -80,7 +80,7 @@ const Profile = () => {
                 )}
               </h5>
               <p className="text-sm text-ld opacity-80">
-                {session?.user?.email || "user@chalkboard.com"}
+                {session?.user?.email || "user@b3billing.com"}
               </p>
             </div>
           </div>

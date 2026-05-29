@@ -346,7 +346,7 @@ const TransactionsPage = () => {
       (locale === 'id' ? 'Pajak' : 'Tax');
     
     // Create a temporary translations object for the selected locale
-    const storeName = storeSettings.store_name || (locale === 'id' ? 'BILLIARD CHALKBOARD' : 'CHALKBOARD BILLIARD');
+    const storeName = storeSettings.store_name || 'B3-BILLING BILLIARD BATAM';
     const receiptTranslations = locale === 'id' ? {
       title: storeName.toUpperCase(),
       subtitle: 'Struk Pembayaran',

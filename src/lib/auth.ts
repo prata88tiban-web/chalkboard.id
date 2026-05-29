@@ -9,7 +9,7 @@ import { getServerSession } from 'next-auth';
 
 // Ensure NEXTAUTH_SECRET has a fallback for desktop mode
 if (!process.env.NEXTAUTH_SECRET && process.env.DEPLOYMENT_MODE === 'desktop') {
-  process.env.NEXTAUTH_SECRET = 'chalkboard-desktop-secret';
+  process.env.NEXTAUTH_SECRET = 'b3billing-desktop-secret';
 }
 
 const authOptions: AuthOptions = {

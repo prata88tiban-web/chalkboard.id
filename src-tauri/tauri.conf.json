@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Chalkboard",
+  "productName": "B3-Billing Billiard Batam",
   "version": "1.0.0",
   "identifier": "com.kugie.chalkboard",
   "build": {
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Chalkboard - Billiard Hall Management",
+        "title": "B3-Billing Billiard Batam - Billiard Hall Management",
         "width": 1400,
         "height": 900,
         "minWidth": 1024,

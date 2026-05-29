@@ -247,7 +247,7 @@ const basicTableData2: TableType2[] = [
   {
       avatar: img9,
       name: 'Isabel Vasquez',
-      post: 'Modernize admin',
+      post: 'B3-Billing Billiard Batam',
       status: 'pending',
       statuscolor: 'success',
       users: [

@@ -826,7 +826,7 @@ const TablesManagement = () => {
       .then(res => res.json())
       .then(data => {
         const s = data.settings || {};
-        const storeName = (s.store_name || 'CHALKBOARD BILLIARD').trim();
+        const storeName = (s.store_name || 'B3-BILLING BILLIARD BATAM').trim();
         const storeAddress = (s.store_address || '').trim();
         const storePhone = (s.store_phone || '').trim();
         const storeNotes = (s.store_notes || '').trim();
